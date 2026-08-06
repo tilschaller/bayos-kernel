@@ -67,9 +67,9 @@ clean:
 	rm -f kernel $(OBJS) $(C_OBJS:.o=.d)
 
 DESTDIR ?=
-PREFIX ?=
+PREFIX ?= /boot
 
 .PHONY: install
 install: kernel
-	mkdir -p $(DESTDIR)$(PREFIX)
-	cp kernel $(DESTDIR)$(PREFIX)/kernel.elf
+	install -d "$(DESTDIR)$(PREFIX)"
+	install -m 644 kernel "$(DESTDIR)$(PREFIX)/kernel.elf"
