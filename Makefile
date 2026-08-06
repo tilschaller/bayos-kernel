@@ -66,6 +66,10 @@ kernel: $(OBJS) kernel.ld Makefile assets/font.o
 clean: 
 	rm -f kernel $(OBJS) $(C_OBJS:.o=.d)
 
+DESTDIR ?=
+PREFIX ?=
+
 .PHONY: install
 install: kernel
-	cp kernel ../iso/boot/kernel.elf
+	mkdir -p $(DESTDIR)$(PREFIX)
+	cp kernel $(DESTDIR)$(PREFIX)/kernel.elf
