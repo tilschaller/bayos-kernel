@@ -160,7 +160,7 @@ void _start(void) {
 	// find the init process
 	//
 	uint8_t *init_elf;
-	int init_file_size = tar_lookup(module_request.response->modules[0]->address, "usr/bin/init", &init_elf);
+	int init_file_size = tar_lookup(module_request.response->modules[0]->address, "./usr/bin/init", &init_elf);
 	if (!init_file_size) {
 		early_printk("[FAIL] no init process in initramfs\n");
 		asm volatile("hlt");
@@ -197,17 +197,9 @@ void _start(void) {
 	syscall_init();
 
 	//
-	// map the stack of the init process into our address space
-	// this creates 2 MiB stack at 2MiB
-	//
-	bitmap_allocator *ba = MUTEX_LOCK(g_ba);
-	map_init_stack(hhdm_request.response->offset, ba);
-	MUTEX_UNLOCK(g_ba);
-
-	//
 	// then we need to copy the elf file
 	//
-	ba = MUTEX_LOCK(g_ba);
+	bitmap_allocator *ba = MUTEX_LOCK(g_ba);
 	map_init_elf(ba, hhdm_request.response->offset, init_elf);
 	MUTEX_UNLOCK(g_ba);
 
@@ -229,14 +221,24 @@ void enter_ring_3_init(void) {
 	resource_add(PIPE, g_keyboard_pipe);
 	resource_add(PIPE, g_framebuffer_print_pipe);
 
+	//
+	// map the stack of the init process into our address space
+	// this creates 2 MiB stack at 2MiB
+	//
+	bitmap_allocator *ba = MUTEX_LOCK(g_ba);
+	map_init_stack(hhdm_request.response->offset, ba);
+	MUTEX_UNLOCK(g_ba);
+
+	*(uint64_t*)0x201000 = 0x201000;
+
 	asm volatile(
 		"mov $0x202, %%r11\n\t"
-		"mov $0x401000, %%rcx\n\t"
+		"mov $0x400170, %%rcx\n\t"
 		"mov $0x400000, %%rsp\n\t"
 		"sysretq\n\t"
 		:
 		:
-		: "rcx", "r11", "memory", "rsp"
+		: "rcx", "r11", "memory"
 	);
 
 	for (;;);

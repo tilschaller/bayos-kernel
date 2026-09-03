@@ -3,6 +3,7 @@
 #include <framebuffer.h>
 #include <sched.h>
 #include <keyboard.h>
+#include <memory.h>
 
 extern void _syscall_handler;
 
@@ -35,6 +36,8 @@ static inline void wrmsr(uint32_t msr, uint64_t value)
 
 void syscall_init(void) {
 	// enable syscalls
+    // also some things needed for userspace programs are
+    // Set here, like enabling sse and setting swags
 	uint64_t efer = rdmsr(0xC0000080);
 	wrmsr(0xC0000080, efer | 1);
 
@@ -44,11 +47,29 @@ void syscall_init(void) {
 
 	wrmsr(0xC0000084, (1 << 9) | (1 << 10) | (1 << 8) | (1 << 18));
 
-	wrmsr(0xC0000100, 0x1fc000);
+    wrmsr(0xC0000100, 0x201000);
+    wrmsr(0xC0000101, 0x201000);
+
+    asm volatile (
+        "mov %%cr0, %%rax\n\t"
+        "and $~(1 << 2), %%rax\n\t"  // clear EM
+        "or  $(1 << 1), %%rax\n\t"   // set MP
+        "mov %%rax, %%cr0\n\t"
+
+        "mov %%cr4, %%rax\n\t"
+        "or  $(1 << 9), %%rax\n\t"   // OSFXSR
+        "or  $(1 << 10), %%rax\n\t"  // OSXMMEXCPT
+        "mov %%rax, %%cr4\n\t"
+        :
+        :
+        : "rax", "memory"
+    );
 }
 
 static uint64_t write_syscall(uint64_t fd, const uint8_t *buf, size_t len);
 static uint64_t read_syscall(uint64_t fd, uint8_t *buf, size_t len);
+static uint64_t anon_allocate_syscall(size_t size, uint64_t *dk);
+static uint64_t exit_syscall(uint64_t exit);
 
 uint64_t syscall_handler(uint64_t index, uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5) {
     switch (index) {
@@ -56,6 +77,10 @@ uint64_t syscall_handler(uint64_t index, uint64_t arg0, uint64_t arg1, uint64_t 
         return read_syscall(arg0, (uint8_t*)arg1, arg2);
     case 1:
         return write_syscall(arg0, (uint8_t*)arg1, arg2);
+    case 2:
+        return anon_allocate_syscall(arg0, (uint64_t*)arg1);
+    case 3:
+	return exit_syscall(arg0);
     default:
         return (uint64_t)-1;
     }
@@ -67,4 +92,28 @@ static uint64_t read_syscall(uint64_t fd, uint8_t *buf, size_t len) {
 
 static uint64_t write_syscall(uint64_t fd, const uint8_t *buf, size_t len) {
     return resource_write(fd, buf, len);
+}
+
+uint64_t save_this_in_process = 0x800000;
+static uint64_t anon_allocate_syscall(size_t size, uint64_t *ptr) {
+    int pages = (size + 0xfff) >> 12;
+
+    uint64_t ret = save_this_in_process;
+
+    for (int i = 0; i < pages; i++) {
+        bitmap_allocator *ba = MUTEX_LOCK(g_ba);
+        map_memory_page_current(ba, save_this_in_process, 7);
+        MUTEX_UNLOCK(g_ba);
+        save_this_in_process += 0x1000;
+    }
+
+    *ptr = ret;
+    return 0;
+}
+
+uint64_t exit_syscall(uint64_t exit) {
+    // just halt for now
+    for (;;) {
+        asm volatile("hlt");
+    }
 }

@@ -193,7 +193,15 @@ void map_init_stack(uint64_t offset, bitmap_allocator *ba) {
 
 extern volatile struct limine_hhdm_request hhdm_request;
 
-// this is already protected by the bitmap_allocator
+static inline uintptr_t alloc_page_or_halt(bitmap_allocator *ba) {
+	uintptr_t frame = (uintptr_t)allocate_page(ba);
+	if (frame == 0) {
+		asm volatile("cli; hlt");
+		__builtin_unreachable();
+	}
+	return frame;
+}
+
 void map_memory_page_current(bitmap_allocator *ba, uintptr_t virt, int flags) {
 	unsigned long save = save_irqdisable();
 
@@ -203,35 +211,36 @@ void map_memory_page_current(bitmap_allocator *ba, uintptr_t virt, int flags) {
 	irqrestore(save);
 
 	size_t pml4_index = (virt >> 39) & 0x1ff;
-	size_t pdp_index = (virt >> 30) & 0x1ff;
-	size_t pd_index = (virt >> 21) & 0x1ff;
-	size_t pt_index = (virt >> 12) & 0x1ff;
+	size_t pdp_index  = (virt >> 30) & 0x1ff;
+	size_t pd_index   = (virt >> 21) & 0x1ff;
+	size_t pt_index   = (virt >> 12) & 0x1ff;
 
 	uint8_t *offset = (uint8_t*)hhdm_request.response->offset;
 
 	uint64_t *pml4 = (uint64_t*)(cr3 + offset);
 	if ((pml4[pml4_index] & 1) == 0) {
-		uintptr_t frame = (uintptr_t)allocate_page(ba);
+		uintptr_t frame = alloc_page_or_halt(ba);
 		memset(offset + frame, 0, 0x1000);
 		pml4[pml4_index] = frame | flags;
 	}
 
-	uint64_t *pdp = (uint64_t*)(offset + (pml4[pml4_index] & ~(0xfff)));
+	uint64_t *pdp = (uint64_t*)(offset + (pml4[pml4_index] & ~0xfffULL));
 	if ((pdp[pdp_index] & 1) == 0) {
-		uintptr_t frame = (uintptr_t)allocate_page(ba);
+		uintptr_t frame = alloc_page_or_halt(ba);
 		memset(offset + frame, 0, 0x1000);
 		pdp[pdp_index] = frame | flags;
 	}
 
-	uint64_t *pd = (uint64_t*)(offset + (pdp[pdp_index] & ~(0xfff)));
+	uint64_t *pd = (uint64_t*)(offset + (pdp[pdp_index] & ~0xfffULL));
 	if ((pd[pd_index] & 1) == 0) {
-		uintptr_t frame = (uintptr_t)allocate_page(ba);
+		uintptr_t frame = alloc_page_or_halt(ba);
 		memset(offset + frame, 0, 0x1000);
 		pd[pd_index] = frame | flags;
 	}
 
-	uint64_t *pt = (uint64_t*)(offset + (pd[pd_index] & ~(0xfff)));
-	pt[pt_index] = (uintptr_t)allocate_page(ba) | flags;
+	uint64_t *pt = (uint64_t*)(offset + (pd[pd_index] & ~0xfffULL));
+	if ((pt[pt_index] & 1) == 0) 
+		pt[pt_index] = alloc_page_or_halt(ba) | flags;
 
 	invlpg((void*)virt);
 }

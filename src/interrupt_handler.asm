@@ -105,6 +105,8 @@ _keyboard_handler:
 
 global _syscall_handler
 _syscall_handler:
+	sti
+
 	push rbp
 	push r15
 	push r14
