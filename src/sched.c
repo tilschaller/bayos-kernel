@@ -5,65 +5,11 @@
 #include <interrupts.h>
 #include <string.h>
 #include <io.h>
+#include <early.h>
 
 #define PIT_CHANNEL0 0x40
 #define PIT_COMMAND 0x43
 
-typedef enum {
-	READY,
-	RUNNING,
-	BLOCKED,
-	DEAD,
-} process_status;
-
-//
-// this is the cpu_status passed to the schedule function
-// over the stack
-//
-typedef struct {
-	uint64_t r15;
-	uint64_t r14;
-	uint64_t r13;
-	uint64_t r12;
-	uint64_t r11;
-	uint64_t r10;
-	uint64_t r9;
-	uint64_t r8;
-	uint64_t rdi;
-	uint64_t rsi;
-	uint64_t rbp;
-	uint64_t rdx;
-	uint64_t rcx;
-	uint64_t rbx;
-	uint64_t rax;
-
-	struct {
-		uint64_t rip;
-		uint64_t cs;
-		uint64_t flags;
-		uint64_t rsp;
-		uint64_t ss;
-	} iret;
-} cpu_status;
-
-#define MAX_RESOURCES 0x100
-
-typedef struct process {
-	process_status status;
-	cpu_status *context;
-
-	struct process *next;
-	struct process *wait_next;
-
-	int pid;
-
-	resource resources[MAX_RESOURCES];
-
-	// these following structures depend on the process being a kernel or user process
-	// maybe we could split this struct into 2 smaller ones?
-	uint8_t *kernel_stack;
-	
-} process;
 
 process *process_list = NULL;
 process *current_process = NULL;
@@ -228,6 +174,8 @@ void add_process(uintptr_t func) {
 	context->iret.ss = 0x10;
 
 	p->context = context;
+	p->anon_allocate_end = 0x800000;
+	p->elf_end = 0;
 
 	unsigned long flags = save_irqdisable();
 
@@ -280,12 +228,17 @@ static inline void yield(void) {
 	asm volatile("int $0x20");
 }
 
+// TODO: we should probably also delete the resources used by this process here
+// like for example the open files and allocated pages
+// otherwise we have huge memory leaks
 void mark_current_proc_as_dead(void) {
 	unsigned long flags = save_irqdisable();
 
 	current_process->status = DEAD;
 	
 	irqrestore(flags);
+
+	yield();
 }
 
 void sem_wait(int sem_id) {
@@ -444,8 +397,12 @@ int pipe_try_write(int pipe_id, uint8_t byte) {
 
 	unsigned long flags = save_irqdisable();
 
+	// TODO: check if it is a problem
+	// the buffer mutex lock is not acquired
+
 	p->buffer[p->write_pos] = byte;
 	p->write_pos = (p->write_pos + 1) % p->buffer_len;
+
 	irqrestore(flags);
 
 	sem_signal(p->sem_full);
@@ -457,20 +414,32 @@ int pipe_read(int pipe_id, uint8_t *out, size_t len) {
 
 	if (!p->in_use) return -1;
 
-	size_t i;
-	for (i = 0; i < len; i++) {
-		if (p->write_refs == 0 && sem_table[p->sem_full].count == 0)
-			break;
+	size_t i = 0;
 
-		sem_wait(p->sem_full);
+	if (len == 0) return 0;
 
+	if (p->write_refs == 0 && sem_table[p->sem_full].count == 0)
+		return 0;
+
+	sem_wait(p->sem_full);
+	mutex_lock(p->buf_lock);
+	out[i] = p->buffer[p->read_pos];
+	p->read_pos = (p->read_pos + 1) % p->buffer_len;
+	mutex_unlock(p->buf_lock);
+	sem_signal(p->sem_empty);
+	i++;
+
+	for (; i < len; i++) {
+		if (!sem_trywait(p->sem_full))
+			break; // nothing more ready right now
 		mutex_lock(p->buf_lock);
 		out[i] = p->buffer[p->read_pos];
 		p->read_pos = (p->read_pos + 1) % p->buffer_len;
 		mutex_unlock(p->buf_lock);
-
 		sem_signal(p->sem_empty);
 	}
+
+	return i;
 
 	return i;
 }
@@ -527,12 +496,18 @@ int resource_remove(int fd) {
 	return ret;
 }
 
-int resource_read(int fd, uint8_t *buf, size_t len) {
+process *get_current_process() {
 	unsigned long flags = save_irqdisable();
 
 	process *proc = current_process;
 
 	irqrestore(flags);
+
+	return proc;
+}
+
+int resource_read(int fd, uint8_t *buf, size_t len) {
+	process *proc = get_current_process();
 
 	switch (proc->resources[fd].type) {
 		case PIPE:
@@ -543,11 +518,7 @@ int resource_read(int fd, uint8_t *buf, size_t len) {
 }
 
 int resource_write(int fd, const uint8_t *buf, size_t len) {
-	unsigned long flags = save_irqdisable();
-
-	process *proc = current_process;
-
-	irqrestore(flags);
+	process *proc = get_current_process();
 
 	switch (proc->resources[fd].type) {
 		case PIPE:

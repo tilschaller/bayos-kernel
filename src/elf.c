@@ -3,11 +3,14 @@
 #include <memory.h>
 #include <string.h>
 
-void map_init_elf(bitmap_allocator *ba, uint64_t offset, uint8_t *elf) {
+uint32_t map_init_elf(bitmap_allocator *ba, uint64_t offset, uint8_t *elf) {
 	elf_header *header = (elf_header *)(elf);
 	elf_program *programs = (elf_program*)((uint8_t*)header + header->e_phoff);
+	uint32_t highest_address;
 	for (int i = 0; i < header->e_phnum; i++) {
 		if (programs[i].p_type == 1) {
+			if (programs[i].p_vaddr + programs[i].p_memsz > highest_address)
+				highest_address = programs[i].p_vaddr + programs[i].p_memsz;
 			int pages = ((programs[i].p_memsz + 0x1000 - 1) & ~(0x1000 - 1)) / 0x1000;
 			for (int j = 0; j < pages; j++) {
 				map_memory_page_current(ba, programs[i].p_vaddr + j * 0x1000, 7);
@@ -23,4 +26,5 @@ void map_init_elf(bitmap_allocator *ba, uint64_t offset, uint8_t *elf) {
 			}
 		}
 	}
+	return highest_address;
 }

@@ -244,3 +244,73 @@ void map_memory_page_current(bitmap_allocator *ba, uintptr_t virt, int flags) {
 
 	invlpg((void*)virt);
 }
+
+#define P2V(pa) ((void *)(pa + hhdm_request.response->offset))
+
+#define PAGE_SIZE      4096UL
+#define PAGE_SHIFT     12
+#define PT_INDEX_BITS  9
+#define PT_INDEX_MASK  0x1FFUL
+
+#define PTE_P   (1UL << 0)   // Present
+#define PTE_W   (1UL << 1)   // Writable
+#define PTE_U   (1UL << 2)   // User accessible
+#define PTE_PS  (1UL << 7)
+
+#define PTE_ADDR_MASK 0x000FFFFFFFFFF000UL
+#define PTE_ADDR(pte) ((pte) & PTE_ADDR_MASK)
+
+typedef uint64_t pte_t;
+typedef pte_t *pagetable_t;
+
+static inline uint64_t pt_index(uint64_t va, int level)
+{
+    return (va >> (PAGE_SHIFT + PT_INDEX_BITS * level)) & PT_INDEX_MASK;
+}
+
+static pte_t *walk(uint64_t pml4_phys, uint64_t va)
+{
+    pte_t *table = (pte_t *)P2V(pml4_phys);
+
+    // Levels 3, 2, 1 are the PML4, PDPT, and PD -- each just points to
+    // the next table down.
+    for (int level = 3; level >= 1; level--) {
+        pte_t *entry = &table[pt_index(va, level)];
+
+        if (!(*entry & PTE_P)) {
+            return NULL; // nothing mapped here at all
+        }
+
+        if (*entry & PTE_PS) {
+            // Huge page at this level -- not a 4K leaf PTE.
+            // Bail out; caller isn't set up to handle this.
+            return NULL;
+        }
+
+        table = (pte_t *)P2V(PTE_ADDR(*entry));
+    }
+
+    // level 0: the actual page table, holding 4K page leaf entries
+    return &table[pt_index(va, 0)];
+}
+
+#define PAGE_ROUND_DOWN(a) ((a) & ~(PAGE_SIZE - 1))
+
+void free_region(uint64_t pml4_phys, bitmap_allocator *ba,
+                         uint64_t start, uint64_t end){
+    start = PAGE_ROUND_DOWN(start);
+
+    for (uint64_t va = start; va < end; va += PAGE_SIZE) {
+        pte_t *pte = walk(pml4_phys, va);
+
+        if (pte == NULL || !(*pte & PTE_P)) {
+            continue; // not mapped, nothing to free
+        }
+
+        uint64_t phys_addr = PTE_ADDR(*pte);
+
+        free_page(ba, (void *)phys_addr);
+
+        *pte = 0; // unmap
+    }
+}

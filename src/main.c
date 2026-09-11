@@ -63,6 +63,7 @@ Mutex(allocator) g_al;
 
 
 void enter_ring_3_init(void);
+uint8_t *init_elf;
 
 //
 // this is the entry point called by the bootloader
@@ -159,7 +160,6 @@ void _start(void) {
 	//
 	// find the init process
 	//
-	uint8_t *init_elf;
 	int init_file_size = tar_lookup(module_request.response->modules[0]->address, "./usr/bin/init", &init_elf);
 	if (!init_file_size) {
 		early_printk("[FAIL] no init process in initramfs\n");
@@ -196,13 +196,6 @@ void _start(void) {
 	keyboard_process_init();
 	syscall_init();
 
-	//
-	// then we need to copy the elf file
-	//
-	bitmap_allocator *ba = MUTEX_LOCK(g_ba);
-	map_init_elf(ba, hhdm_request.response->offset, init_elf);
-	MUTEX_UNLOCK(g_ba);
-
 	g_framebuffer_print_pipe = pipe_create(0x100);
 	add_process((uintptr_t)&framebuffer_print_process);
 
@@ -229,6 +222,16 @@ void enter_ring_3_init(void) {
 	map_init_stack(hhdm_request.response->offset, ba);
 	MUTEX_UNLOCK(g_ba);
 
+	//
+	// then we need to copy the elf file
+	//
+	ba = MUTEX_LOCK(g_ba);
+	get_current_process()->elf_end = map_init_elf(ba, hhdm_request.response->offset, init_elf);
+	MUTEX_UNLOCK(g_ba);
+
+	elf_header *header = (elf_header *)(init_elf);
+
+	// something needed for rtld i think
 	*(uint64_t*)0x201000 = 0x201000;
 
 	asm volatile(
@@ -238,6 +241,16 @@ void enter_ring_3_init(void) {
 		"sysretq\n\t"
 		:
 		:
+		: "rcx", "r11", "memory"
+	);
+
+	asm volatile(
+		"mov $0x202, %%r11\n\t"
+		"mov %0, %%rcx\n\t"
+		"mov $0x400000, %%rsp\n\t"
+		"sysretq\n\t"
+		:
+		: "r"(header->e_entry)
 		: "rcx", "r11", "memory"
 	);
 

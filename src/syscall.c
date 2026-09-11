@@ -4,6 +4,7 @@
 #include <sched.h>
 #include <keyboard.h>
 #include <memory.h>
+#include <io.h>
 
 extern void _syscall_handler;
 
@@ -80,7 +81,7 @@ uint64_t syscall_handler(uint64_t index, uint64_t arg0, uint64_t arg1, uint64_t 
     case 2:
         return anon_allocate_syscall(arg0, (uint64_t*)arg1);
     case 3:
-	return exit_syscall(arg0);
+	    return exit_syscall(arg0);
     default:
         return (uint64_t)-1;
     }
@@ -94,17 +95,18 @@ static uint64_t write_syscall(uint64_t fd, const uint8_t *buf, size_t len) {
     return resource_write(fd, buf, len);
 }
 
-uint64_t save_this_in_process = 0x800000;
 static uint64_t anon_allocate_syscall(size_t size, uint64_t *ptr) {
     int pages = (size + 0xfff) >> 12;
 
-    uint64_t ret = save_this_in_process;
+    process *proc = get_current_process();
+
+    uint64_t ret = proc->anon_allocate_end;
 
     for (int i = 0; i < pages; i++) {
         bitmap_allocator *ba = MUTEX_LOCK(g_ba);
-        map_memory_page_current(ba, save_this_in_process, 7);
+        map_memory_page_current(ba, proc->anon_allocate_end, 7);
         MUTEX_UNLOCK(g_ba);
-        save_this_in_process += 0x1000;
+        proc->anon_allocate_end += 0x1000;
     }
 
     *ptr = ret;
@@ -112,8 +114,25 @@ static uint64_t anon_allocate_syscall(size_t size, uint64_t *ptr) {
 }
 
 uint64_t exit_syscall(uint64_t exit) {
-    // just halt for now
-    for (;;) {
-        asm volatile("hlt");
+    process *process = get_current_process();
+    // free all resources
+    for (int i = 0; i < MAX_RESOURCES; i++) {
+        resource_remove(i);
     }
+
+    unsigned long save = save_irqdisable();
+    uint64_t cr3;
+    asm volatile("mov %%cr3, %0" : "=r"(cr3));
+    irqrestore(save);
+
+    bitmap_allocator *ba = MUTEX_LOCK(g_ba);
+    free_region(cr3, ba, 0x200000, 0x400000);
+    free_region(cr3, ba, 0x400000, process->elf_end);
+    free_region(cr3, ba, 0x800000, process->anon_allocate_end);
+    MUTEX_UNLOCK(g_ba);
+
+
+    // this doesnt return, it yields control to the scheduler
+    // all resources need to be deleted here
+    mark_current_proc_as_dead();
 }

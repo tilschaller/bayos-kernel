@@ -54,4 +54,9 @@ void map_memory_page_current(bitmap_allocator *ba, uintptr_t virt, int flags);
 DEFINE_MUTEX_TYPE(bitmap_allocator);
 extern Mutex(bitmap_allocator) g_ba;
 
+typedef uint64_t pte_t;
+typedef pte_t *pagetable_t;
+
+void free_region(uint64_t pml4_phys, bitmap_allocator *ba, uint64_t start, uint64_t end);
+
 #endif // _MEMORY_H

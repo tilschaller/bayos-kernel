@@ -6,6 +6,77 @@
 struct allocator;
 void sched_init(struct allocator *al);
 
+typedef enum {
+	EMPTY = 0,
+	PIPE,
+} resource_type;
+
+typedef struct {
+	resource_type type;
+	int type_id;
+} resource;
+
+#define MAX_RESOURCES 0x100
+
+typedef enum {
+	READY,
+	RUNNING,
+	BLOCKED,
+	DEAD,
+} process_status;
+
+//
+// this is the cpu_status passed to the schedule function
+// over the stack
+//
+typedef struct {
+	uint64_t r15;
+	uint64_t r14;
+	uint64_t r13;
+	uint64_t r12;
+	uint64_t r11;
+	uint64_t r10;
+	uint64_t r9;
+	uint64_t r8;
+	uint64_t rdi;
+	uint64_t rsi;
+	uint64_t rbp;
+	uint64_t rdx;
+	uint64_t rcx;
+	uint64_t rbx;
+	uint64_t rax;
+
+	struct {
+		uint64_t rip;
+		uint64_t cs;
+		uint64_t flags;
+		uint64_t rsp;
+		uint64_t ss;
+	} iret;
+} cpu_status;
+
+typedef struct process {
+	process_status status;
+	cpu_status *context;
+
+	struct process *next;
+	struct process *wait_next;
+
+	int pid;
+
+
+	// these following structures depend on the process being a kernel or user process
+	// maybe we could split this struct into 2 smaller ones?
+	//
+	// kernel things
+	uint8_t *kernel_stack;
+
+	// user things
+	resource resources[MAX_RESOURCES];
+	uint64_t anon_allocate_end;
+	uint32_t elf_end;
+} process;
+
 void add_process(uintptr_t func);
 void mark_current_proc_as_dead(void);
 
@@ -44,15 +115,7 @@ int pipe_try_write(int pipe_id, uint8_t byte);
 int pipe_read(int pipe_id, uint8_t *out, size_t len);
 void pipe_close(int pipe_id);
 
-typedef enum {
-	EMPTY = 0,
-	PIPE,
-} resource_type;
-
-typedef struct {
-	resource_type type;
-	int type_id;
-} resource;
+process *get_current_process();
 
 // add a resource to the process struct
 // returns the file descriptor
