@@ -244,16 +244,6 @@ void enter_ring_3_init(void)
 
 	asm volatile(
 	        "mov $0x202, %%r11\n\t"
-	        "mov $0x400170, %%rcx\n\t"
-	        "mov $0x400000, %%rsp\n\t"
-	        "sysretq\n\t"
-	        :
-	        :
-	        : "rcx", "r11", "memory"
-	);
-
-	asm volatile(
-	        "mov $0x202, %%r11\n\t"
 	        "mov %0, %%rcx\n\t"
 	        "mov $0x400000, %%rsp\n\t"
 	        "sysretq\n\t"
