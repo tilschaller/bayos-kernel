@@ -11,10 +11,12 @@
 //
 framebuffer *fb_default = NULL;
 
-void early_printk_init(framebuffer *fb) {
+void early_printk_init(framebuffer *fb)
+{
 	fb_default = fb;
 }
-void early_printk(char *str) {
+void early_printk(char *str)
+{
 	if (!fb_default) return;
 
 	char *arr = str;

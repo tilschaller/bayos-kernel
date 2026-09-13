@@ -1,0 +1,29 @@
+# astylerc — Linux kernel coding style
+# Usage: astyle --options=.astylerc your_file.c
+
+# --- Brace style ---
+--style=linux
+--break-closing-braces
+
+# --- Indentation ---
+--indent=tab=8
+--indent-continuation=1
+--min-conditional-indent=0
+--indent-switches
+--indent-cases
+--indent-preproc-block
+--indent-preproc-cond
+--indent-col1-comments
+
+# --- Padding ---
+--pad-header
+--unpad-paren
+--pad-oper
+--align-pointer=name
+--align-reference=name
+
+# --- Line length ---
+--max-code-length=80
+
+# --- Line endings ---
+--lineend=linux

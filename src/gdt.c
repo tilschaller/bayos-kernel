@@ -84,9 +84,11 @@ gdt gdt_inst = {
 	GDT_ENTRY(0xfa, 0xa),
 };
 
-void gdt_init(void) {
+void gdt_init(void)
+{
 	tss_inst.rsp[0] = (uint64_t)kernel_stack + sizeof(kernel_stack);
-	tss_inst.ist[DOUBLE_FAULT_IST_INDEX] = (uint64_t)double_fault_stack + sizeof(double_fault_stack);
+	tss_inst.ist[DOUBLE_FAULT_IST_INDEX] = (uint64_t)double_fault_stack + sizeof(
+	                double_fault_stack);
 
 	gdt_inst.tss = GDT_TSS_ENTRY(&tss_inst);
 
@@ -99,21 +101,21 @@ void gdt_init(void) {
 
 	// reload all the segment registers
 	asm volatile(
-		"mov $0x10, %%ax;"
-		"mov %%ax, %%ds;"
-		"mov %%ax, %%es;"
-		"mov %%ax, %%fs;"
-		"mov %%ax, %%gs;"
-		"mov %%ax, %%ss;"
+	        "mov $0x10, %%ax;"
+	        "mov %%ax, %%ds;"
+	        "mov %%ax, %%es;"
+	        "mov %%ax, %%fs;"
+	        "mov %%ax, %%gs;"
+	        "mov %%ax, %%ss;"
 
-		"pushq $0x8;"
-		"leaq 1f(%%rip), %%rax;"
-		"pushq %%rax;"
-		"retfq;"
-		"1:;"
+	        "pushq $0x8;"
+	        "leaq 1f(%%rip), %%rax;"
+	        "pushq %%rax;"
+	        "retfq;"
+	        "1:;"
 
-		: : : "rax", "memory"
+	        : : : "rax", "memory"
 	);
 
-	asm volatile("ltr %0" : : "r"((uint16_t)0x18) : );
+	asm volatile("ltr %0" : : "r"((uint16_t)0x18) :);
 }

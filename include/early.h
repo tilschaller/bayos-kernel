@@ -1,7 +1,7 @@
 #ifndef _EARLY_H
 #define _EARLY_H
 
-// 
+//
 // functions in here should only be used in the context
 // of early boot, that means no scheduler is running,
 // interrupts are disabled.

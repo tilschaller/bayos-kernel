@@ -8,7 +8,7 @@
 extern int g_framebuffer_print_pipe;
 void framebuffer_print_process(void);
 
-// 
+//
 // this struct contains one instance of a framebuffer
 //
 typedef struct framebuffer {
@@ -25,7 +25,7 @@ typedef struct framebuffer {
 
 } framebuffer;
 
-// 
+//
 // this function takes a pointer to a limine framebuffer as received by the bootloader
 // and writes a framebuffer to fb
 // this can be used to write characters to it

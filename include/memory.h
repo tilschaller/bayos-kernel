@@ -5,7 +5,7 @@
 #include <limine.h>
 #include <sched.h>
 
-// TODO: performance improvements 
+// TODO: performance improvements
 // (maybe as suggested here: https://wiki.osdev.org/Page_Frame_Allocation#Bitmap)
 // please remember to change this, when modifying bitmap_allocator
 #define OFFSET_OF_DATA_IN_AREA 24
@@ -21,28 +21,18 @@ typedef struct {
 } bitmap_allocator;
 
 //
-// this creates a new bitmap allocator 
+// this creates a new bitmap allocator
 // using the hhdm memory offset
 // it returns the pages as physical addresses though
 //
-void bitmap_allocator_init(struct limine_memmap_response *memmap, uint64_t offset, bitmap_allocator *ba);
+void bitmap_allocator_init(struct limine_memmap_response *memmap,
+                           uint64_t offset, bitmap_allocator *ba);
 
 //
 // return and free physical pages
 //
 void *allocate_page(bitmap_allocator *ba);
 void free_page(bitmap_allocator *ba, void *page);
-
-//
-// allocate 2mb of pages for the heap using a bitmap allocator
-// NOTE: only call this once, at boot time
-//
-// please dont just change these, without understanding what the function does
-// and checking if this will break anything
-#define HEAP_SIZE (2 * 1024 * 1024) // 2MiB
-#define HEAP_ADDR (0xffffffff80000000 - HEAP_SIZE)
-void allocate_heap(uint64_t offset, bitmap_allocator *ba);
-void map_init_stack(uint64_t offset, bitmap_allocator *ba);
 
 //
 // map_memory_function
@@ -57,6 +47,13 @@ extern Mutex(bitmap_allocator) g_ba;
 typedef uint64_t pte_t;
 typedef pte_t *pagetable_t;
 
-void free_region(uint64_t pml4_phys, bitmap_allocator *ba, uint64_t start, uint64_t end);
+
+extern volatile struct limine_hhdm_request hhdm_request;
+#define P2V(pa) ((void *)(pa + hhdm_request.response->offset))
+
+void allocate_region_current(bitmap_allocator *ba, uintptr_t start,
+                             uintptr_t end, int flags);
+void free_region(uint64_t pml4_phys, bitmap_allocator *ba, uint64_t start,
+                 uint64_t end);
 
 #endif // _MEMORY_H

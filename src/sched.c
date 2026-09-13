@@ -26,7 +26,8 @@ process *current_process = NULL;
 extern void timer_int_handler;
 
 
-void sched_init(struct allocator *al) {
+void sched_init(struct allocator *al)
+{
 	//
 	// first we need to set up a timer interrupt, so
 	// we can even create a preemptive scheduler
@@ -78,7 +79,7 @@ void sched_init(struct allocator *al) {
 	outb(PIT_CHANNEL0, (divisor >> 8) & 0xff);
 
 	// now as soon as we enable interrupts, one will fire every 10ms
-	
+
 	// so that our schedule function works, we need to create a initial process,
 	// (our) _start function
 	process *p = alloc(al, sizeof(process));
@@ -95,7 +96,7 @@ void sched_init(struct allocator *al) {
 // if a function has been marked as dead
 // it should free all objects associated with the function and
 // free all memory
-// NOTE: this runs with interrupts disabled, since its only 
+// NOTE: this runs with interrupts disabled, since its only
 // called from the schedule function
 // HINT: if you want to delete a process manually do it with
 // mark_current_proc_as_dead()
@@ -103,10 +104,11 @@ void sched_init(struct allocator *al) {
 // if we cant get the allocator we just skip this schedule round and let it be
 // till the allocator gets free sometimes
 //
-static void delete_process_resources(void) {
+static void delete_process_resources(void)
+{
 	allocator *al = MUTEX_TRY_LOCK(g_al);
 	if (!al) return;
-	
+
 	if (current_process->kernel_stack)
 		free(al, current_process->kernel_stack);
 	free(al, current_process);
@@ -118,7 +120,8 @@ static void delete_process_resources(void) {
 // this function will schedule a process
 // NOTE: this runs with interrupts disabled
 //
-cpu_status *schedule(cpu_status *context) {
+cpu_status *schedule(cpu_status *context)
+{
 	current_process->context = context;
 	if (current_process->status != DEAD && current_process->status != BLOCKED)
 		current_process->status = READY;
@@ -127,18 +130,20 @@ cpu_status *schedule(cpu_status *context) {
 		process *prev_process = current_process;
 		if (current_process->next != NULL) {
 			current_process = current_process->next;
-		} else {
+		}
+		else {
 			current_process = process_list;
 		}
 
-		if (current_process != NULL && 
+		if (current_process != NULL &&
 		    (current_process->status == DEAD || current_process->status == BLOCKED)) {
 			if (current_process->status == DEAD) {
 				prev_process->next = current_process->next;
 				delete_process_resources();
 				current_process = prev_process;
 			}
-		} else {
+		}
+		else {
 			current_process->status = RUNNING;
 			break;
 		}
@@ -147,7 +152,8 @@ cpu_status *schedule(cpu_status *context) {
 	return current_process->context;
 }
 
-void add_process(uintptr_t func) {
+void add_process(uintptr_t func)
+{
 	// create a new process struct
 	allocator *al = MUTEX_LOCK(g_al);
 
@@ -180,7 +186,7 @@ void add_process(uintptr_t func) {
 	unsigned long flags = save_irqdisable();
 
 	process *last = process_list;
-	while (last->next != 0) 
+	while (last->next != 0)
 		last = last->next;
 
 	last->next = p;
@@ -206,7 +212,8 @@ typedef struct semaphore {
 
 static semaphore sem_table[MAX_SEMAPHORES] = {0};
 
-int sem_create(int initial_count) {
+int sem_create(int initial_count)
+{
 	unsigned long flags = save_irqdisable();
 
 	for (int i = 0; i < MAX_SEMAPHORES; i++) {
@@ -224,24 +231,27 @@ int sem_create(int initial_count) {
 }
 
 // manually trigger the timer interrupt
-static inline void yield(void) {
+static inline void yield(void)
+{
 	asm volatile("int $0x20");
 }
 
 // TODO: we should probably also delete the resources used by this process here
 // like for example the open files and allocated pages
 // otherwise we have huge memory leaks
-void mark_current_proc_as_dead(void) {
+void mark_current_proc_as_dead(void)
+{
 	unsigned long flags = save_irqdisable();
 
 	current_process->status = DEAD;
-	
+
 	irqrestore(flags);
 
 	yield();
 }
 
-void sem_wait(int sem_id) {
+void sem_wait(int sem_id)
+{
 	unsigned long flags = save_irqdisable();
 
 	semaphore *sem = &sem_table[sem_id];
@@ -253,7 +263,8 @@ void sem_wait(int sem_id) {
 
 		if (sem->wait_tail) {
 			sem->wait_tail->wait_next = current_process;
-		} else {
+		}
+		else {
 			sem->wait_head = current_process;
 		}
 		sem->wait_tail = current_process;
@@ -267,7 +278,8 @@ void sem_wait(int sem_id) {
 
 
 // returns 1 if acquired without blocking, 0 if would have blocked
-int sem_trywait(int sem_id) {
+int sem_trywait(int sem_id)
+{
 	unsigned long flags = save_irqdisable();
 
 	semaphore *sem = &sem_table[sem_id];
@@ -281,7 +293,8 @@ int sem_trywait(int sem_id) {
 	return 0;
 }
 
-void sem_signal(int sem_id) {
+void sem_signal(int sem_id)
+{
 	unsigned long flags = save_irqdisable();
 
 	semaphore *sem = &sem_table[sem_id];
@@ -298,7 +311,8 @@ void sem_signal(int sem_id) {
 	irqrestore(flags);
 }
 
-void sem_destroy(int sem_id) {
+void sem_destroy(int sem_id)
+{
 	unsigned long flags = save_irqdisable();
 
 	sem_table[sem_id].in_use = 0;
@@ -331,13 +345,14 @@ typedef struct {
 
 static pipe pipe_table[MAX_PIPES];
 
-int pipe_create(size_t buffer_len) {
+int pipe_create(size_t buffer_len)
+{
 	unsigned long flags = save_irqdisable();
 
 	for (int i = 0; i < MAX_PIPES; i++) {
 		if (!pipe_table[i].in_use) {
 			pipe *p = &pipe_table[i];
-			
+
 			allocator *al = MUTEX_LOCK(g_al);
 			p->buffer = alloc(al, buffer_len);
 			MUTEX_UNLOCK(g_al);
@@ -361,7 +376,8 @@ int pipe_create(size_t buffer_len) {
 	return -1;
 }
 
-int pipe_write(int pipe_id, const uint8_t *data, size_t len) {
+int pipe_write(int pipe_id, const uint8_t *data, size_t len)
+{
 	pipe *p = &pipe_table[pipe_id];
 
 	if (!p->in_use || p->read_refs == 0)
@@ -385,7 +401,8 @@ int pipe_write(int pipe_id, const uint8_t *data, size_t len) {
 	return len;
 }
 
-int pipe_try_write(int pipe_id, uint8_t byte) {
+int pipe_try_write(int pipe_id, uint8_t byte)
+{
 	pipe *p = &pipe_table[pipe_id];
 
 	if (!p->in_use || p->read_refs == 0)
@@ -409,7 +426,8 @@ int pipe_try_write(int pipe_id, uint8_t byte) {
 	return 1;
 }
 
-int pipe_read(int pipe_id, uint8_t *out, size_t len) {
+int pipe_read(int pipe_id, uint8_t *out, size_t len)
+{
 	pipe *p = &pipe_table[pipe_id];
 
 	if (!p->in_use) return -1;
@@ -444,7 +462,8 @@ int pipe_read(int pipe_id, uint8_t *out, size_t len) {
 	return i;
 }
 
-void pipe_close_write(int pipe_id) {
+void pipe_close_write(int pipe_id)
+{
 	pipe *p = &pipe_table[pipe_id];
 	mutex_lock(p->buf_lock);
 	p->write_refs--;
@@ -453,7 +472,8 @@ void pipe_close_write(int pipe_id) {
 	mutex_unlock(p->buf_lock);
 }
 
-void pipe_close_read(int pipe_id) {
+void pipe_close_read(int pipe_id)
+{
 	pipe *p = &pipe_table[pipe_id];
 	mutex_lock(p->buf_lock);
 	p->read_refs--;
@@ -462,11 +482,13 @@ void pipe_close_read(int pipe_id) {
 	mutex_unlock(p->buf_lock);
 }
 
-void pipe_close(int pipe_id) {
+void pipe_close(int pipe_id)
+{
 	pipe_table[pipe_id].in_use = 0;
 }
 
-int resource_add(resource_type type, int type_id) {
+int resource_add(resource_type type, int type_id)
+{
 	unsigned long flags = save_irqdisable();
 
 	for (int i = 0; i < MAX_RESOURCES; i++) {
@@ -483,7 +505,8 @@ int resource_add(resource_type type, int type_id) {
 	return -1;
 
 }
-int resource_remove(int fd) {
+int resource_remove(int fd)
+{
 	unsigned long flags = save_irqdisable();
 
 	int ret = -1;
@@ -496,7 +519,8 @@ int resource_remove(int fd) {
 	return ret;
 }
 
-process *get_current_process() {
+process *get_current_process()
+{
 	unsigned long flags = save_irqdisable();
 
 	process *proc = current_process;
@@ -506,7 +530,8 @@ process *get_current_process() {
 	return proc;
 }
 
-int resource_read(int fd, uint8_t *buf, size_t len) {
+int resource_read(int fd, uint8_t *buf, size_t len)
+{
 	process *proc = get_current_process();
 
 	switch (proc->resources[fd].type) {
@@ -517,7 +542,8 @@ int resource_read(int fd, uint8_t *buf, size_t len) {
 	}
 }
 
-int resource_write(int fd, const uint8_t *buf, size_t len) {
+int resource_write(int fd, const uint8_t *buf, size_t len)
+{
 	process *proc = get_current_process();
 
 	switch (proc->resources[fd].type) {

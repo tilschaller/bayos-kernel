@@ -49,10 +49,12 @@ static volatile struct limine_module_request module_request = {
 };
 
 __attribute__((used, section(".limine_requests_start")))
-static volatile uint64_t limine_requests_start_marker[] = LIMINE_REQUESTS_START_MARKER;
+static volatile uint64_t limine_requests_start_marker[] =
+        LIMINE_REQUESTS_START_MARKER;
 
 __attribute__((used, section(".limine_requests_end")))
-static volatile uint64_t limine_requests_end_marker[] = LIMINE_REQUESTS_END_MARKER;
+static volatile uint64_t limine_requests_end_marker[] =
+        LIMINE_REQUESTS_END_MARKER;
 
 //
 // the global mutexes of objects created in main.c
@@ -71,17 +73,18 @@ uint8_t *init_elf;
 // set up the scheduler, and then pass control to it
 //
 __attribute__((noreturn))
-void _start(void) {
-	// 
-	// the least we need from the bootlaoder 
+void _start(void)
+{
+	//
+	// the least we need from the bootlaoder
 	// 1. is the revision 4 of the limine protocol
 	// (since we need features from that)
 	// 2.  a framebuffer
 	// if one of these is not met, we halt execution
 	if (!LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) ||
-		framebuffer_request.response == NULL ||
-     		framebuffer_request.response->framebuffer_count < 1
-	) 
+	    framebuffer_request.response == NULL ||
+	    framebuffer_request.response->framebuffer_count < 1
+	   )
 		asm volatile("hlt");
 
 	//
@@ -98,14 +101,14 @@ void _start(void) {
 	early_printk_init(&fb);
 	early_printk("OS for BS\n");
 
-	// 
+	//
 	// the next step is setting up valid exceptions
 	// so the cpu can never crash without outputting some info
 	//
 	exceptions_init();
 	early_printk("[OK] Exceptions\n");
 
-	// 
+	//
 	// next we need to set up our own gdts
 	//
 	gdt_init();
@@ -125,20 +128,22 @@ void _start(void) {
 	}
 
 	bitmap_allocator page_allocator;
-	bitmap_allocator_init(memory_map_request.response, hhdm_request.response->offset, &page_allocator);
+	bitmap_allocator_init(memory_map_request.response,
+	                      hhdm_request.response->offset, &page_allocator);
 	early_printk("[OK] Bitmap Allocator\n");
 
 	//
 	// then we need to allocate space for the heap
 	//
-	allocate_heap(hhdm_request.response->offset, &page_allocator);
+	allocate_region_current(&page_allocator, 0xffffffff80000000 - 0x200000,
+	                        0xffffffff80000000, 3);
 	early_printk("[OK] Heap\n");
 
 	//
 	// with this space we can actually create the allocator
 	//
 	allocator al;
-	new_allocator(HEAP_ADDR, HEAP_SIZE, &al);
+	new_allocator(0xffffffff80000000 - 0x200000, 0x200000, &al);
 	early_printk("[OK] Allocator\n");
 
 	//
@@ -160,7 +165,8 @@ void _start(void) {
 	//
 	// find the init process
 	//
-	int init_file_size = tar_lookup(module_request.response->modules[0]->address, "./usr/bin/init", &init_elf);
+	int init_file_size = tar_lookup(module_request.response->modules[0]->address,
+	                                "./usr/bin/init", &init_elf);
 	if (!init_file_size) {
 		early_printk("[FAIL] no init process in initramfs\n");
 		asm volatile("hlt");
@@ -210,7 +216,8 @@ void _start(void) {
 }
 
 __attribute__((noreturn))
-void enter_ring_3_init(void) {
+void enter_ring_3_init(void)
+{
 	resource_add(PIPE, g_keyboard_pipe);
 	resource_add(PIPE, g_framebuffer_print_pipe);
 
@@ -219,39 +226,40 @@ void enter_ring_3_init(void) {
 	// this creates 2 MiB stack at 2MiB
 	//
 	bitmap_allocator *ba = MUTEX_LOCK(g_ba);
-	map_init_stack(hhdm_request.response->offset, ba);
+	allocate_region_current(ba, 0x200000, 0x400000, 7);
 	MUTEX_UNLOCK(g_ba);
 
 	//
 	// then we need to copy the elf file
 	//
 	ba = MUTEX_LOCK(g_ba);
-	get_current_process()->elf_end = map_init_elf(ba, hhdm_request.response->offset, init_elf);
+	get_current_process()->elf_end = map_init_elf(ba, hhdm_request.response->offset,
+	        init_elf);
 	MUTEX_UNLOCK(g_ba);
 
 	elf_header *header = (elf_header *)(init_elf);
 
 	// something needed for rtld i think
-	*(uint64_t*)0x201000 = 0x201000;
+	*(uint64_t *)0x201000 = 0x201000;
 
 	asm volatile(
-		"mov $0x202, %%r11\n\t"
-		"mov $0x400170, %%rcx\n\t"
-		"mov $0x400000, %%rsp\n\t"
-		"sysretq\n\t"
-		:
-		:
-		: "rcx", "r11", "memory"
+	        "mov $0x202, %%r11\n\t"
+	        "mov $0x400170, %%rcx\n\t"
+	        "mov $0x400000, %%rsp\n\t"
+	        "sysretq\n\t"
+	        :
+	        :
+	        : "rcx", "r11", "memory"
 	);
 
 	asm volatile(
-		"mov $0x202, %%r11\n\t"
-		"mov %0, %%rcx\n\t"
-		"mov $0x400000, %%rsp\n\t"
-		"sysretq\n\t"
-		:
-		: "r"(header->e_entry)
-		: "rcx", "r11", "memory"
+	        "mov $0x202, %%r11\n\t"
+	        "mov %0, %%rcx\n\t"
+	        "mov $0x400000, %%rsp\n\t"
+	        "sysretq\n\t"
+	        :
+	        : "r"(header->e_entry)
+	        : "rcx", "r11", "memory"
 	);
 
 	for (;;);

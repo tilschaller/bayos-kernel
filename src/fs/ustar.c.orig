@@ -1,8 +1,7 @@
 #include <fs/ustar.h>
 #include <string.h>
 
-static int oct2bin(uint8_t *str, int size)
-{
+static int oct2bin(uint8_t *str, int size) {
 	int n = 0;
 	uint8_t *c = str;
 
@@ -14,8 +13,7 @@ static int oct2bin(uint8_t *str, int size)
 	return n;
 }
 
-int tar_lookup(uint8_t *archive, char *filename, uint8_t **out)
-{
+int tar_lookup(uint8_t *archive, char *filename, uint8_t **out) {
 	uint8_t *ptr = archive;
 
 	while (!memcmp(ptr + 257, "ustar", 5)) {

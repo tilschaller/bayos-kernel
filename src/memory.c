@@ -3,15 +3,17 @@
 #include <io.h>
 #include <limine.h>
 
-// 
+//
 // helper functions for bitmap_allocator_init()
 //
 // how many bytes do we need for this particular bitmap
-static inline size_t bitmap_bytes_for(size_t page_count) {
+static inline size_t bitmap_bytes_for(size_t page_count)
+{
 	return (page_count + 7) / 8;
 }
 // given a number of pages, compute, how many pages are needed to store information about this segment
-static size_t calc_header_pages(size_t page_count) {
+static size_t calc_header_pages(size_t page_count)
+{
 	size_t header_pages = 1;
 	size_t prev;
 
@@ -21,17 +23,20 @@ static size_t calc_header_pages(size_t page_count) {
 		size_t needed_bytes = OFFSET_OF_DATA_IN_AREA + bitmap_bytes_for(usable_pages);
 		header_pages = (needed_bytes + 0x1000 - 1) / 0x1000;
 		if (header_pages == 0) header_pages = 1;
-	} while (header_pages != prev);
+	}
+	while (header_pages != prev);
 
 	return header_pages;
 }
 
 //
-// this creates a new bitmap allocator 
+// this creates a new bitmap allocator
 // using the hhdm memory offset
 // it returns the pages as physical addresses though
 //
-void bitmap_allocator_init(struct limine_memmap_response *memmap, uint64_t offset, bitmap_allocator *ba) {
+void bitmap_allocator_init(struct limine_memmap_response *memmap,
+                           uint64_t offset, bitmap_allocator *ba)
+{
 	size_t entry_count = 0;
 	for (int i = 0; i < (int)memmap->entry_count; i++) {
 		struct limine_memmap_entry *entry = memmap->entries[i];
@@ -40,11 +45,12 @@ void bitmap_allocator_init(struct limine_memmap_response *memmap, uint64_t offse
 			size_t header_pages = calc_header_pages(total_pages);
 			size_t usable_pages = total_pages - header_pages;
 
-			ba->areas[entry_count] = (void*)(entry->base + offset);
+			ba->areas[entry_count] = (void *)(entry->base + offset);
 
 			memset(ba->areas[entry_count], 0, header_pages * 0x1000);
 
-			ba->areas[entry_count]->first_page = (void*)(entry->base + header_pages * 0x1000);
+			ba->areas[entry_count]->first_page = (void *)(entry->base + header_pages *
+			        0x1000);
 			ba->areas[entry_count]->pages_count = usable_pages;
 			ba->areas[entry_count]->used = 0;
 
@@ -60,7 +66,8 @@ void bitmap_allocator_init(struct limine_memmap_response *memmap, uint64_t offse
 // return the index of the unused page in the bitmap
 // the bitmap must contain an unused page
 // and mark as used
-static int find_unused_page(uint8_t *bitmap, size_t len) {
+static int find_unused_page(uint8_t *bitmap, size_t len)
+{
 	for (size_t i = 0; i < len; i++) {
 		for (int j = 0; j < 8; j++) {
 			int val = (bitmap[i] >> j) & 1;
@@ -78,12 +85,14 @@ static int find_unused_page(uint8_t *bitmap, size_t len) {
 // these functions allocator and free physical pages
 // using the bitmap allocator
 //
-void *allocate_page(bitmap_allocator *ba) {
+void *allocate_page(bitmap_allocator *ba)
+{
 	for (size_t i = 0; i < ba->areas_count; i++) {
 		if (ba->areas[i]->pages_count != ba->areas[i]->used) {
-			int index = find_unused_page(ba->areas[i]->data, bitmap_bytes_for(ba->areas[i]->pages_count));
+			int index = find_unused_page(ba->areas[i]->data,
+			                             bitmap_bytes_for(ba->areas[i]->pages_count));
 			ba->areas[i]->used++;
-			return (void*)((uintptr_t)ba->areas[i]->first_page + index * 0x1000);
+			return (void *)((uintptr_t)ba->areas[i]->first_page + index * 0x1000);
 		}
 	}
 
@@ -91,10 +100,12 @@ void *allocate_page(bitmap_allocator *ba) {
 }
 
 // we just assume the address is proper
-void free_page(bitmap_allocator *ba, void *page) {
+void free_page(bitmap_allocator *ba, void *page)
+{
 	// first check, if the area contains the page we want to free
 	for (size_t i = 0; i < ba->areas_count; i++) {
-		if (page >= ba->areas[i]->first_page && page < ba->areas[i]->first_page + ba->areas[i]->pages_count * 0x1000) {
+		if (page >= ba->areas[i]->first_page
+		    && page < ba->areas[i]->first_page + ba->areas[i]->pages_count * 0x1000) {
 			// the page is in this area of memory
 			ba->areas[i]->used--;
 			int index = (page - ba->areas[i]->first_page) / 0x1000;
@@ -106,94 +117,13 @@ void free_page(bitmap_allocator *ba, void *page) {
 	}
 }
 
-#define HEAP_SIZE (2 * 1024 * 1024) // 2MiB
-#define HEAP_ADDR (0xffffffff80000000 - HEAP_SIZE)
-#define HEAP_FLAGS 3
-#define PAGE_ADDR_MASK 0x000ffffffffff000ULL
-
-static inline void invlpg(void *p) {
+static inline void invlpg(void *p)
+{
 	asm volatile("invlpg (%0)" : : "b"(p) : "memory");
 }
 
-void allocate_heap(uint64_t offset, bitmap_allocator *ba) {
-	// first we need to get cr3
-	uint64_t cr3;
-	asm volatile("mov %%cr3, %0" : "=r"(cr3));
-
-	// first we need to check if the needed pages already exist
-	size_t pml4_index = (HEAP_ADDR >> 39) & 0x1ff;
-	size_t pdp_index = (HEAP_ADDR >> 30) & 0x1ff;
-	size_t pd_index = (HEAP_ADDR >> 21) & 0x1ff;
-
-	uint64_t *pml4 = (uint64_t*)(cr3 + offset);
-	if (pml4[pml4_index] == 0) {
-		pml4[pml4_index] = (uintptr_t)allocate_page(ba) | HEAP_FLAGS;
-		memset((void*)((pml4[pml4_index] & PAGE_ADDR_MASK) + offset), 0, 0x1000);
-	}
-
-	uint64_t *pdp = (uint64_t*)((pml4[pml4_index] & PAGE_ADDR_MASK) + offset);
-	if (pdp[pdp_index] == 0) {
-		pdp[pdp_index] = (uintptr_t)allocate_page(ba) | HEAP_FLAGS;
-		memset((void*)((pdp[pdp_index] & PAGE_ADDR_MASK) + offset), 0, 0x1000);
-	}
-
-	uint64_t *pd = (uint64_t*)((pdp[pdp_index] & PAGE_ADDR_MASK) + offset);
-	if (pd[pd_index] == 0) {
-		pd[pd_index] = (uintptr_t)allocate_page(ba) | HEAP_FLAGS;
-		memset((void*)((pd[pd_index] & PAGE_ADDR_MASK) + offset), 0, 0x1000);
-	}
-
-	uint64_t *pt = (uint64_t*)((pd[pd_index] & PAGE_ADDR_MASK) + offset);
-	for (int i = 0; i < HEAP_SIZE / 0x1000; i++) {
-		pt[i] = (uintptr_t)allocate_page(ba) | HEAP_FLAGS;
-		invlpg((void*)(HEAP_ADDR + 0x1000 * i));
-	}
-
-	memset((void*)HEAP_ADDR, 0, HEAP_SIZE);
-}
-
-#define INIT_STACK_SIZE (2 * 1024 * 1024) // 2MiB
-#define INIT_STACK_ADDR (2 * 1024 * 1024) // at 2MiB
-#define INIT_STACK_FLAGS 7
-
-void map_init_stack(uint64_t offset, bitmap_allocator *ba) {
-	uint64_t cr3;
-	asm volatile("mov %%cr3, %0" : "=r"(cr3));
-
-	size_t pml4_index = (INIT_STACK_ADDR >> 39) & 0x1ff;
-	size_t pdp_index = (INIT_STACK_ADDR >> 30) & 0x1ff;
-	size_t pd_index = (INIT_STACK_ADDR >> 21) & 0x1ff;
-
-	uint64_t *pml4 = (uint64_t*)(cr3 + offset);
-	if (pml4[pml4_index] == 0) {
-		pml4[pml4_index] = (uintptr_t)allocate_page(ba) | INIT_STACK_FLAGS;
-		memset((void*)((pml4[pml4_index] & PAGE_ADDR_MASK) + offset), 0, 0x1000);
-	}
-
-	uint64_t *pdp = (uint64_t*)((pml4[pml4_index] & PAGE_ADDR_MASK) + offset);
-	if (pdp[pdp_index] == 0) {
-		pdp[pdp_index] = (uintptr_t)allocate_page(ba) | INIT_STACK_FLAGS;
-		memset((void*)((pdp[pdp_index] & PAGE_ADDR_MASK) + offset), 0, 0x1000);
-	}
-
-	uint64_t *pd = (uint64_t*)((pdp[pdp_index] & PAGE_ADDR_MASK) + offset);
-	if (pd[pd_index] == 0) {
-		pd[pd_index] = (uintptr_t)allocate_page(ba) | INIT_STACK_FLAGS;
-		memset((void*)((pd[pd_index] & PAGE_ADDR_MASK) + offset), 0, 0x1000);
-	}
-
-	uint64_t *pt = (uint64_t*)((pd[pd_index] & PAGE_ADDR_MASK) + offset);
-	for (int i = 0; i < INIT_STACK_SIZE / 0x1000; i++) {
-		pt[i] = (uintptr_t)allocate_page(ba) | INIT_STACK_FLAGS;
-		invlpg((void*)(INIT_STACK_ADDR + 0x1000 * i));
-	}
-
-	memset((void*)INIT_STACK_ADDR, 0, INIT_STACK_SIZE);
-}
-
-extern volatile struct limine_hhdm_request hhdm_request;
-
-static inline uintptr_t alloc_page_or_halt(bitmap_allocator *ba) {
+static inline uintptr_t alloc_page_or_halt(bitmap_allocator *ba)
+{
 	uintptr_t frame = (uintptr_t)allocate_page(ba);
 	if (frame == 0) {
 		asm volatile("cli; hlt");
@@ -202,7 +132,8 @@ static inline uintptr_t alloc_page_or_halt(bitmap_allocator *ba) {
 	return frame;
 }
 
-void map_memory_page_current(bitmap_allocator *ba, uintptr_t virt, int flags) {
+void map_memory_page_current(bitmap_allocator *ba, uintptr_t virt, int flags)
+{
 	unsigned long save = save_irqdisable();
 
 	uint64_t cr3;
@@ -215,37 +146,37 @@ void map_memory_page_current(bitmap_allocator *ba, uintptr_t virt, int flags) {
 	size_t pd_index   = (virt >> 21) & 0x1ff;
 	size_t pt_index   = (virt >> 12) & 0x1ff;
 
-	uint8_t *offset = (uint8_t*)hhdm_request.response->offset;
+	uint8_t *offset = (uint8_t *)hhdm_request.response->offset;
 
-	uint64_t *pml4 = (uint64_t*)(cr3 + offset);
+	uint64_t *pml4 = (uint64_t *)(cr3 + offset);
 	if ((pml4[pml4_index] & 1) == 0) {
 		uintptr_t frame = alloc_page_or_halt(ba);
 		memset(offset + frame, 0, 0x1000);
 		pml4[pml4_index] = frame | flags;
 	}
 
-	uint64_t *pdp = (uint64_t*)(offset + (pml4[pml4_index] & ~0xfffULL));
+	uint64_t *pdp = (uint64_t *)(offset + (pml4[pml4_index] & ~0xfffULL));
 	if ((pdp[pdp_index] & 1) == 0) {
 		uintptr_t frame = alloc_page_or_halt(ba);
 		memset(offset + frame, 0, 0x1000);
 		pdp[pdp_index] = frame | flags;
 	}
 
-	uint64_t *pd = (uint64_t*)(offset + (pdp[pdp_index] & ~0xfffULL));
+	uint64_t *pd = (uint64_t *)(offset + (pdp[pdp_index] & ~0xfffULL));
 	if ((pd[pd_index] & 1) == 0) {
 		uintptr_t frame = alloc_page_or_halt(ba);
 		memset(offset + frame, 0, 0x1000);
 		pd[pd_index] = frame | flags;
 	}
 
-	uint64_t *pt = (uint64_t*)(offset + (pd[pd_index] & ~0xfffULL));
-	if ((pt[pt_index] & 1) == 0) 
+	uint64_t *pt = (uint64_t *)(offset + (pd[pd_index] & ~0xfffULL));
+	if ((pt[pt_index] & 1) == 0)
 		pt[pt_index] = alloc_page_or_halt(ba) | flags;
 
-	invlpg((void*)virt);
+	invlpg((void *)virt);
 }
 
-#define P2V(pa) ((void *)(pa + hhdm_request.response->offset))
+
 
 #define PAGE_SIZE      4096UL
 #define PAGE_SHIFT     12
@@ -265,52 +196,63 @@ typedef pte_t *pagetable_t;
 
 static inline uint64_t pt_index(uint64_t va, int level)
 {
-    return (va >> (PAGE_SHIFT + PT_INDEX_BITS * level)) & PT_INDEX_MASK;
+	return (va >> (PAGE_SHIFT + PT_INDEX_BITS * level)) & PT_INDEX_MASK;
 }
 
 static pte_t *walk(uint64_t pml4_phys, uint64_t va)
 {
-    pte_t *table = (pte_t *)P2V(pml4_phys);
+	pte_t *table = (pte_t *)P2V(pml4_phys);
 
-    // Levels 3, 2, 1 are the PML4, PDPT, and PD -- each just points to
-    // the next table down.
-    for (int level = 3; level >= 1; level--) {
-        pte_t *entry = &table[pt_index(va, level)];
+	// Levels 3, 2, 1 are the PML4, PDPT, and PD -- each just points to
+	// the next table down.
+	for (int level = 3; level >= 1; level--) {
+		pte_t *entry = &table[pt_index(va, level)];
 
-        if (!(*entry & PTE_P)) {
-            return NULL; // nothing mapped here at all
-        }
+		if (!(*entry & PTE_P)) {
+			return NULL; // nothing mapped here at all
+		}
 
-        if (*entry & PTE_PS) {
-            // Huge page at this level -- not a 4K leaf PTE.
-            // Bail out; caller isn't set up to handle this.
-            return NULL;
-        }
+		if (*entry & PTE_PS) {
+			// Huge page at this level -- not a 4K leaf PTE.
+			// Bail out; caller isn't set up to handle this.
+			return NULL;
+		}
 
-        table = (pte_t *)P2V(PTE_ADDR(*entry));
-    }
+		table = (pte_t *)P2V(PTE_ADDR(*entry));
+	}
 
-    // level 0: the actual page table, holding 4K page leaf entries
-    return &table[pt_index(va, 0)];
+	// level 0: the actual page table, holding 4K page leaf entries
+	return &table[pt_index(va, 0)];
 }
 
 #define PAGE_ROUND_DOWN(a) ((a) & ~(PAGE_SIZE - 1))
 
 void free_region(uint64_t pml4_phys, bitmap_allocator *ba,
-                         uint64_t start, uint64_t end){
-    start = PAGE_ROUND_DOWN(start);
+                 uint64_t start, uint64_t end)
+{
+	start = PAGE_ROUND_DOWN(start);
 
-    for (uint64_t va = start; va < end; va += PAGE_SIZE) {
-        pte_t *pte = walk(pml4_phys, va);
+	for (uint64_t va = start; va < end; va += PAGE_SIZE) {
+		pte_t *pte = walk(pml4_phys, va);
 
-        if (pte == NULL || !(*pte & PTE_P)) {
-            continue; // not mapped, nothing to free
-        }
+		if (pte == NULL || !(*pte & PTE_P)) {
+			continue; // not mapped, nothing to free
+		}
 
-        uint64_t phys_addr = PTE_ADDR(*pte);
+		uint64_t phys_addr = PTE_ADDR(*pte);
 
-        free_page(ba, (void *)phys_addr);
+		free_page(ba, (void *)phys_addr);
 
-        *pte = 0; // unmap
-    }
+		*pte = 0; // unmap
+	}
+}
+
+void allocate_region_current(bitmap_allocator *ba, uintptr_t start,
+                             uintptr_t end, int flags)
+{
+	start = PAGE_ROUND_DOWN(start);
+
+	for (uintptr_t va = start; va < end; va += PAGE_SIZE) {
+		map_memory_page_current(ba, va, flags);
+	}
 }

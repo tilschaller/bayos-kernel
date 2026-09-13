@@ -1,7 +1,7 @@
 #include <framebuffer.h>
 #include <string.h>
 
-// 
+//
 // the external sysmbols provided by the font
 // this just contains a bitmap of said font
 //
@@ -31,39 +31,47 @@ typedef struct {
 
 #define TAB_SIZE 8
 
-static inline uint64_t width(framebuffer *fb) {
+static inline uint64_t width(framebuffer *fb)
+{
 	return fb->info.width;
 }
 
-static inline uint64_t height(framebuffer *fb) {
+static inline uint64_t height(framebuffer *fb)
+{
 	return fb->info.height;
 }
 
-static inline void carriage_return(framebuffer *fb) {
+static inline void carriage_return(framebuffer *fb)
+{
 	fb->x_pos = BORDER_PADDING;
 }
 
-static inline void newline(framebuffer *fb) {
+static inline void newline(framebuffer *fb)
+{
 	fb->y_pos += CHAR_RASTER_HEIGHT + LINE_SPACING;
 	carriage_return(fb);
 }
 
-static inline void clear(framebuffer *fb) {
+static inline void clear(framebuffer *fb)
+{
 	uint64_t size = fb->info.bpp / 8 * width(fb) * height(fb);
 	fb->x_pos = BORDER_PADDING;
 	fb->y_pos = BORDER_PADDING;
 	memset(fb->buffer, 0, size);
 }
 
-static inline void write_pixel(framebuffer *fb, uint64_t x, uint64_t y, uint32_t color) {
+static inline void write_pixel(framebuffer *fb, uint64_t x, uint64_t y,
+                               uint32_t color)
+{
 	uint32_t *arr = fb->buffer;
 	arr[x + (y * (fb->info.pitch / 4))] = color;
 }
 
-static void write_char(framebuffer *fb, unsigned char c, uint32_t color) {
+static void write_char(framebuffer *fb, unsigned char c, uint32_t color)
+{
 	int bytes_per_glyph = (CHAR_RASTER_WIDTH * CHAR_RASTER_HEIGHT) / 8;
 
-	uint8_t *glyph = (uint8_t*)&_binary_zap_vga16_psf_start +
+	uint8_t *glyph = (uint8_t *)&_binary_zap_vga16_psf_start +
 	                 sizeof(PSF1_header) +
 	                 c * bytes_per_glyph;
 
@@ -79,30 +87,32 @@ static void write_char(framebuffer *fb, unsigned char c, uint32_t color) {
 	fb->x_pos += CHAR_RASTER_WIDTH + LETTER_SPACING;
 }
 
-static int32_t putchar(framebuffer *fb, int32_t c) {
+static int32_t putchar(framebuffer *fb, int32_t c)
+{
 	switch (c) {
-	case '\n':
-		newline(fb);
-		break;
-	case '\r':
-		carriage_return(fb);
-		break;
-	default:
-		uint64_t new_xpos = fb->x_pos + CHAR_RASTER_WIDTH;
-		if (new_xpos >= width(fb)) {
+		case '\n':
 			newline(fb);
-		}
-		uint64_t new_ypos = fb->y_pos + CHAR_RASTER_HEIGHT + BORDER_PADDING;
-		if (new_ypos >= height(fb)) {
-			clear(fb);
-		}
-		write_char(fb, (char)c, 0xffffffff);
+			break;
+		case '\r':
+			carriage_return(fb);
+			break;
+		default:
+			uint64_t new_xpos = fb->x_pos + CHAR_RASTER_WIDTH;
+			if (new_xpos >= width(fb)) {
+				newline(fb);
+			}
+			uint64_t new_ypos = fb->y_pos + CHAR_RASTER_HEIGHT + BORDER_PADDING;
+			if (new_ypos >= height(fb)) {
+				clear(fb);
+			}
+			write_char(fb, (char)c, 0xffffffff);
 	}
-	
+
 	return 0;
 }
 
-void framebuffer_init(struct limine_framebuffer *info, framebuffer *fb) {
+void framebuffer_init(struct limine_framebuffer *info, framebuffer *fb)
+{
 	fb->info.width = info->width;
 	fb->info.height = info->height;
 	fb->info.bpp = info->bpp;
@@ -115,13 +125,14 @@ void framebuffer_init(struct limine_framebuffer *info, framebuffer *fb) {
 
 int g_framebuffer_print_pipe;
 
-void framebuffer_print_process(void) {
+void framebuffer_print_process(void)
+{
 	for (;;) {
 		unsigned char buf;
 		pipe_read(g_framebuffer_print_pipe, &buf, sizeof(buf));
 
-        	framebuffer *fb = MUTEX_LOCK(g_fb);
-        	fb->putchar(fb, (int)buf);
-        	MUTEX_UNLOCK(g_fb);
+		framebuffer *fb = MUTEX_LOCK(g_fb);
+		fb->putchar(fb, (int)buf);
+		MUTEX_UNLOCK(g_fb);
 	}
 }

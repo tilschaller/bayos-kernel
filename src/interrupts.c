@@ -1,12 +1,12 @@
 #include <interrupts.h>
 #include <early.h>
 
-// 
+//
 // this is the general exception handler
-// for interrupts 0-31, called by the functions in 
+// for interrupts 0-31, called by the functions in
 // exception_handler.asm
 // NOTE: these functions do not return, but print a error instead
-// also NOTE: these use early_prinkt for now, which is not really proper, 
+// also NOTE: these use early_prinkt for now, which is not really proper,
 // but the best solution for now. since it doesnt really matter, if the framebuffer
 // gets corrupted. we should just try to output something useful before halting completely
 //
@@ -14,8 +14,10 @@
 // err is the error code, if there is one
 //
 __attribute__((noreturn))
-void exception_handler(uint64_t num, uint64_t err) {
-	(void)num; (void)err;
+void exception_handler(uint64_t num, uint64_t err)
+{
+	(void)num;
+	(void)err;
 	early_printk("exception occured\n");
 	early_printk("halting execution\n");
 
@@ -49,7 +51,7 @@ typedef struct {
 __attribute__((aligned(0x10)))
 static idt_entry idt[0x100];
 
-// 
+//
 // this is the idt register structure
 // you just write the size and porinter
 // to the idt table in it and can load it
@@ -63,7 +65,9 @@ typedef struct {
 // this function writes a function pointer into the idt table
 // and sets required flags
 //
-void idt_set_descriptor(uint8_t entry, uint64_t isr, uint8_t flags, uint8_t ist) {
+void idt_set_descriptor(uint8_t entry, uint64_t isr, uint8_t flags,
+                        uint8_t ist)
+{
 	idt[entry].isr_low = isr & 0xffff;
 	idt[entry].kernel_cs = 0x8;
 	idt[entry].ist = ist & 0x7;
@@ -78,12 +82,13 @@ void idt_set_descriptor(uint8_t entry, uint64_t isr, uint8_t flags, uint8_t ist)
 //
 extern uintptr_t isr_stub_table[32];
 
-// 
+//
 // this function is called from the _start function
 // it sets up the interrupt table
 // and writes the exception handlers in it
 //
-void exceptions_init() {
+void exceptions_init()
+{
 	// create a valid idtr
 	idt_register idtr = {
 		sizeof(idt) - 1,
@@ -98,7 +103,8 @@ void exceptions_init() {
 			// we set the ist to one, so the stack gets switched when this occurs
 			// so we can guarantee the cpu never crashes, but instead always ends up here
 			idt_set_descriptor(i, isr_stub_table[i], 0x8e, 1);
-		} else {
+		}
+		else {
 			// this just uses the stack it was on when the exception occured
 			idt_set_descriptor(i, isr_stub_table[i], 0x8e, 0);
 
@@ -106,5 +112,5 @@ void exceptions_init() {
 	}
 
 	// last we actually load it
-	asm volatile ("lidt %0" : : "m"(idtr) : "memory");
+	asm volatile("lidt %0" : : "m"(idtr) : "memory");
 }
