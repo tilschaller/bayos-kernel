@@ -1,6 +1,7 @@
 extern schedule
 extern keyboard_handler
 extern syscall_handler
+extern get_current_process
 
 global timer_int_handler
 timer_int_handler:
@@ -31,8 +32,22 @@ timer_int_handler:
 	mov rdi, rsp
 	; call the schedule function
 	call schedule
-	; returns a pointer to stack, restore it
-	mov rsp, rax
+	; returns a pointer to stack, store it
+	; r15 is preserved
+	mov r15, rax
+
+	call get_current_process
+	; returns the pointer to the current process cr3
+	mov rcx, cr3
+	cmp rax, rcx
+	je __cr3_equal
+
+	; switch the cr3
+	mov rcx, [rax]
+	mov cr3, rcx
+
+__cr3_equal:
+	mov rsp, r15
 
 	; restore all the registers
 	pop r15

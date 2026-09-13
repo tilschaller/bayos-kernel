@@ -32,4 +32,19 @@ void irqrestore(unsigned long flags)
 	asm("push %0\n\tpopf" : : "rm"(flags) : "memory", "cc");
 }
 
+void write_cr3(unsigned long long value)
+{
+	asm volatile(
+	        "mov %0, %%cr3"
+	        :
+	        : "r"(value)
+	        : "memory"
+	);
+}
 
+uint64_t read_cr3(void)
+{
+	uint64_t cr3;
+	asm volatile("mov %%cr3, %0" : "=r"(cr3));
+	return cr3;
+}

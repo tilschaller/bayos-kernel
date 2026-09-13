@@ -1,10 +1,13 @@
 #include <syscall.h>
+#include <alloc.h>
+#include <string.h>
 #include <stdint.h>
 #include <framebuffer.h>
 #include <sched.h>
 #include <keyboard.h>
 #include <memory.h>
 #include <io.h>
+#include <early.h>
 
 extern void _syscall_handler;
 
@@ -72,7 +75,7 @@ static uint64_t write_syscall(uint64_t fd, const uint8_t *buf, size_t len);
 static uint64_t read_syscall(uint64_t fd, uint8_t *buf, size_t len);
 static uint64_t anon_allocate_syscall(size_t size, uint64_t *dk);
 static uint64_t exit_syscall(uint64_t exit);
-static uint64_t fork_syscall(int pid);
+static uint64_t fork_syscall();
 
 uint64_t syscall_handler(uint64_t index, uint64_t arg0, uint64_t arg1,
                          uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5)
@@ -87,7 +90,7 @@ uint64_t syscall_handler(uint64_t index, uint64_t arg0, uint64_t arg1,
 		case 3:
 			return exit_syscall(arg0);
 		case 4:
-			return fork_syscall((int)arg0);
+			return fork_syscall();
 		default:
 			return (uint64_t) -1;
 	}
@@ -113,7 +116,7 @@ static uint64_t anon_allocate_syscall(size_t size, uint64_t *ptr)
 
 	for (int i = 0; i < pages; i++) {
 		bitmap_allocator *ba = MUTEX_LOCK(g_ba);
-		map_memory_page_current(ba, proc->anon_allocate_end, 7);
+		map_memory_page(ba, read_cr3(), proc->anon_allocate_end, 7);
 		MUTEX_UNLOCK(g_ba);
 		proc->anon_allocate_end += 0x1000;
 	}
@@ -130,10 +133,7 @@ static uint64_t exit_syscall(uint64_t exit)
 		resource_remove(i);
 	}
 
-	unsigned long save = save_irqdisable();
-	uint64_t cr3;
-	asm volatile("mov %%cr3, %0" : "=r"(cr3));
-	irqrestore(save);
+	uint64_t cr3 = process->cr3;
 
 	bitmap_allocator *ba = MUTEX_LOCK(g_ba);
 	free_region(cr3, ba, 0x200000, 0x400000);
@@ -147,23 +147,102 @@ static uint64_t exit_syscall(uint64_t exit)
 	mark_current_proc_as_dead();
 }
 
-static uint64_t fork_syscall(int pid)
+extern process *current_process;
+static uint64_t fork_syscall()
 {
-	// first get the current cr3
-	unsigned long save = save_irqdisable();
-	uint64_t cr3;
-	asm volatile("mov %%cr3, %0" : "=r"(cr3));
-	irqrestore(save);
+	process *proc = get_current_process();
+	uint64_t cr3 = proc->cr3;
 
 	// allocate a new cr3
 	bitmap_allocator *ba = MUTEX_LOCK(g_ba);
 	uint64_t new_cr3 = (uintptr_t)allocate_page(ba);
 	MUTEX_UNLOCK(g_ba);
 
-	// map the kernel mappings
+	// mirror all the higher memory regions
 	uint64_t *v_new_cr3 = P2V(new_cr3);
 	uint64_t *v_cr3 = P2V(cr3);
 	for (int i = 256; i < 512; i++) {
 		v_new_cr3[i] = v_cr3[i];
 	}
-}
+
+	ba = MUTEX_LOCK(g_ba);
+	allocate_region(ba, new_cr3, 0x200000, proc->elf_end, 7);
+	allocate_region(ba, new_cr3, 0x800000, proc->anon_allocate_end, 7);
+	MUTEX_UNLOCK(g_ba);
+
+	// now we have two identical address spaces
+	// add a new process
+	allocator *al = MUTEX_LOCK(g_al);
+	process *p = alloc(al, sizeof(process));
+	MUTEX_UNLOCK(g_al);
+
+	memcpy(p, proc, sizeof(process));
+	// adjust the cr3 of the new process
+	p->cr3 = new_cr3;
+
+	// now we pretend an intterupt happened right here
+	uint64_t save_stack;
+	cpu_status context;
+
+	// fill the context
+	asm volatile(
+	        "movq %%rsp, (%0)\n\t"
+
+	        "movq %1, %%rsp\n\t"
+
+	        "pushq $0x10\n\t"
+	        "pushq (%0)\n\t"
+	        "pushfq\n\t"
+	        "pushq $0x8\n\t"
+	        "pushq %2\n\t"
+
+	        "pushq %%rax\n\t"
+	        "pushq %%rbx\n\t"
+	        "pushq %%rcx\n\t"
+	        "pushq %%rdx\n\t"
+	        "pushq %%rbp\n\t"
+	        "pushq %%rsi\n\t"
+	        "pushq %%rdi\n\t"
+	        "pushq %%r8\n\t"
+	        "pushq %%r9\n\t"
+	        "pushq %%r10\n\t"
+	        "pushq %%r11\n\t"
+	        "pushq %%r12\n\t"
+	        "pushq %%r13\n\t"
+	        "pushq %%r14\n\t"
+	        "pushq %%r15\n\t"
+
+	        "movq (%0), %%rsp\n\t"
+	        :
+	        : "r"(&save_stack),
+	        "r"(((uint64_t)&context) + sizeof(cpu_status)),
+	        "r"(&&__after_timer)
+	        : "memory"
+	);
+
+__after_timer:
+	// if we are the new process, we return
+	if (get_current_process()->cr3 == new_cr3) {
+		asm volatile("sti");
+		return 0;
+	}
+
+	// copy all the data between the page tables
+	// including the iret frame, which is why the execution will
+	// continue where we placed the int 0x20
+	copy_pages_between_pagetables(new_cr3, cr3, 0x200000, proc->elf_end);
+	copy_pages_between_pagetables(new_cr3, cr3, 0x800000, proc->anon_allocate_end);
+
+	p->context = &context;
+
+	insert_process(p);
+
+	// now yield
+	// the inserted process will always be behind the
+	// current one in the linked list
+	// meaning we reach __after_timer before
+	// the stack becomes invalid
+	asm volatile("int $0x20");
+
+	return 1;
+};

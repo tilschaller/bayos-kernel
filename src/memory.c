@@ -2,6 +2,7 @@
 #include <string.h>
 #include <io.h>
 #include <limine.h>
+#include <early.h>
 
 //
 // helper functions for bitmap_allocator_init()
@@ -132,15 +133,9 @@ static inline uintptr_t alloc_page_or_halt(bitmap_allocator *ba)
 	return frame;
 }
 
-void map_memory_page_current(bitmap_allocator *ba, uintptr_t virt, int flags)
+void map_memory_page(bitmap_allocator *ba, uint64_t cr3,  uintptr_t virt,
+                     int flags)
 {
-	unsigned long save = save_irqdisable();
-
-	uint64_t cr3;
-	asm volatile("mov %%cr3, %0" : "=r"(cr3));
-
-	irqrestore(save);
-
 	size_t pml4_index = (virt >> 39) & 0x1ff;
 	size_t pdp_index  = (virt >> 30) & 0x1ff;
 	size_t pd_index   = (virt >> 21) & 0x1ff;
@@ -226,7 +221,8 @@ static pte_t *walk(uint64_t pml4_phys, uint64_t va)
 }
 
 #define PAGE_ROUND_DOWN(a) ((a) & ~(PAGE_SIZE - 1))
-
+// TODO: also free the pages higher up in the hierarchie
+// right now they just stay there (memory leak)
 void free_region(uint64_t pml4_phys, bitmap_allocator *ba,
                  uint64_t start, uint64_t end)
 {
@@ -247,12 +243,38 @@ void free_region(uint64_t pml4_phys, bitmap_allocator *ba,
 	}
 }
 
-void allocate_region_current(bitmap_allocator *ba, uintptr_t start,
-                             uintptr_t end, int flags)
+void allocate_region(bitmap_allocator *ba, uint64_t cr3, uintptr_t start,
+                     uintptr_t end, int flags)
 {
 	start = PAGE_ROUND_DOWN(start);
 
 	for (uintptr_t va = start; va < end; va += PAGE_SIZE) {
-		map_memory_page_current(ba, va, flags);
+		map_memory_page(ba, cr3, va, flags);
 	}
+}
+
+int copy_pages_between_pagetables(uint64_t dst_pml4_phys,
+                                  uint64_t src_pml4_phys,
+                                  uint64_t start,
+                                  uint64_t len)
+{
+	int copied = 0;
+
+	for (uint64_t va = start; va < start + len; va += PAGE_SIZE) {
+		pte_t *src_pte = walk(src_pml4_phys, va);
+		if (!src_pte || !(*src_pte & PTE_P))
+			continue; // nothing mapped in source at this VA -- skip
+
+		pte_t *dst_pte = walk(dst_pml4_phys, va);
+		if (!dst_pte || !(*dst_pte & PTE_P))
+			continue; // nothing mapped in destination -- skip
+
+		void *src_page = (void *)P2V(PTE_ADDR(*src_pte));
+		void *dst_page = (void *)P2V(PTE_ADDR(*dst_pte));
+
+		memcpy(dst_page, src_page, PAGE_SIZE);
+		copied++;
+	}
+
+	return copied;
 }

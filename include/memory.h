@@ -39,7 +39,8 @@ void free_page(bitmap_allocator *ba, void *page);
 //
 // maps one page of memory into the current address space
 //
-void map_memory_page_current(bitmap_allocator *ba, uintptr_t virt, int flags);
+void map_memory_page(bitmap_allocator *ba, uint64_t cr3, uintptr_t virt,
+                     int flags);
 
 DEFINE_MUTEX_TYPE(bitmap_allocator);
 extern Mutex(bitmap_allocator) g_ba;
@@ -51,9 +52,14 @@ typedef pte_t *pagetable_t;
 extern volatile struct limine_hhdm_request hhdm_request;
 #define P2V(pa) ((void *)(pa + hhdm_request.response->offset))
 
-void allocate_region_current(bitmap_allocator *ba, uintptr_t start,
-                             uintptr_t end, int flags);
+void allocate_region(bitmap_allocator *ba, uint64_t cr3, uintptr_t start,
+                     uintptr_t end, int flags);
 void free_region(uint64_t pml4_phys, bitmap_allocator *ba, uint64_t start,
                  uint64_t end);
+
+int copy_pages_between_pagetables(uint64_t dst_pml4_phys,
+                                  uint64_t src_pml4_phys,
+                                  uint64_t start,
+                                  uint64_t len);
 
 #endif // _MEMORY_H

@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <alloc.h>
 #include <sched.h>
+#include <io.h>
 #include <keyboard.h>
 #include <syscall.h>
 #include <fs/ustar.h>
@@ -135,8 +136,8 @@ void _start(void)
 	//
 	// then we need to allocate space for the heap
 	//
-	allocate_region_current(&page_allocator, 0xffffffff80000000 - 0x200000,
-	                        0xffffffff80000000, 3);
+	allocate_region(&page_allocator, read_cr3(), 0xffffffff80000000 - 0x200000,
+	                0xffffffff80000000, 3);
 	early_printk("[OK] Heap\n");
 
 	//
@@ -226,7 +227,7 @@ void enter_ring_3_init(void)
 	// this creates 2 MiB stack at 2MiB
 	//
 	bitmap_allocator *ba = MUTEX_LOCK(g_ba);
-	allocate_region_current(ba, 0x200000, 0x400000, 7);
+	allocate_region(ba, read_cr3(), 0x200000, 0x400000, 7);
 	MUTEX_UNLOCK(g_ba);
 
 	//
@@ -238,6 +239,9 @@ void enter_ring_3_init(void)
 	MUTEX_UNLOCK(g_ba);
 
 	elf_header *header = (elf_header *)(init_elf);
+
+	process *proc = get_current_process();
+	proc->pid = 1;
 
 	// something needed for rtld i think
 	*(uint64_t *)0x201000 = 0x201000;

@@ -56,6 +56,7 @@ typedef struct {
 } cpu_status;
 
 typedef struct process {
+	uint64_t cr3;
 	process_status status;
 	cpu_status *context;
 
@@ -63,7 +64,6 @@ typedef struct process {
 	struct process *wait_next;
 
 	int pid;
-
 
 	// these following structures depend on the process being a kernel or user process
 	// maybe we could split this struct into 2 smaller ones?
@@ -77,6 +77,7 @@ typedef struct process {
 	uint32_t elf_end;
 } process;
 
+void insert_process(process *p);
 void add_process(uintptr_t func);
 void mark_current_proc_as_dead(void);
 

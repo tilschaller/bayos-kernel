@@ -1,5 +1,5 @@
 project('kernel', 'c',
-  default_options: ['warning_level=2', 'buildtype=release'],
+  default_options: ['warning_level=2', 'buildtype=debug'],
 )
 
 nasm = find_program('nasm')
@@ -15,7 +15,6 @@ cc_args = [
   '-fno-ident',
   '-fno-stack-protector',
   '-mno-red-zone',
-  '-O2',
   '-mcmodel=kernel',
   '-mgeneral-regs-only',
   '-nostdinc',
@@ -25,6 +24,7 @@ cc_args = [
   '-fno-PIC',
   '-ffunction-sections',
   '-fdata-sections',
+  '-g',
 ]
 
 inc = include_directories('include')

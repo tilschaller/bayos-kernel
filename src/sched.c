@@ -86,6 +86,7 @@ void sched_init(struct allocator *al)
 	memset(p, 0, sizeof(process));
 	p->status = RUNNING;
 	p->pid = -1;
+	p->cr3 = read_cr3();
 	process_list = p;
 	current_process = p;
 }
@@ -182,7 +183,16 @@ void add_process(uintptr_t func)
 	p->context = context;
 	p->anon_allocate_end = 0x800000;
 	p->elf_end = 0;
+	p->cr3 = read_cr3();
+	unsigned long save = save_irqdisable();
+	asm volatile("mov %%cr3, %0" : "=r"(p->cr3));
+	irqrestore(save);
 
+	insert_process(p);
+}
+
+void insert_process(process *p)
+{
 	unsigned long flags = save_irqdisable();
 
 	process *last = process_list;
@@ -236,9 +246,6 @@ static inline void yield(void)
 	asm volatile("int $0x20");
 }
 
-// TODO: we should probably also delete the resources used by this process here
-// like for example the open files and allocated pages
-// otherwise we have huge memory leaks
 void mark_current_proc_as_dead(void)
 {
 	unsigned long flags = save_irqdisable();
