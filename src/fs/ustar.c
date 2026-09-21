@@ -17,10 +17,12 @@ static int oct2bin(uint8_t *str, int size)
 int tar_lookup(uint8_t *archive, char *filename, uint8_t **out)
 {
 	uint8_t *ptr = archive;
+	if (filename == NULL)
+		return -1;
 
 	while (!memcmp(ptr + 257, "ustar", 5)) {
 		int filesize = oct2bin(ptr + 0x7c, 11);
-		if (!memcmp(ptr, filename, strlen(filename) + 1)) {
+		if (!memcmp(ptr + 1, filename, strlen(filename) + 1)) {
 			*out = ptr + 512;
 			return filesize;
 		}

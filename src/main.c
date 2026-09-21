@@ -44,7 +44,7 @@ volatile struct limine_hhdm_request hhdm_request = {
 };
 
 __attribute__((used, section(".limine_requests")))
-static volatile struct limine_module_request module_request = {
+volatile struct limine_module_request module_request = {
 	.id = LIMINE_MODULE_REQUEST_ID,
 	.revision = 0,
 };
@@ -167,7 +167,7 @@ void _start(void)
 	// find the init process
 	//
 	int init_file_size = tar_lookup(module_request.response->modules[0]->address,
-	                                "./usr/bin/init", &init_elf);
+	                                "/usr/bin/init", &init_elf);
 	if (!init_file_size) {
 		early_printk("[FAIL] no init process in initramfs\n");
 		asm volatile("hlt");
@@ -234,7 +234,7 @@ void enter_ring_3_init(void)
 	// then we need to copy the elf file
 	//
 	ba = MUTEX_LOCK(g_ba);
-	get_current_process()->elf_end = map_init_elf(ba, hhdm_request.response->offset,
+	get_current_process()->elf_end = map_elf(ba, hhdm_request.response->offset,
 	        init_elf);
 	MUTEX_UNLOCK(g_ba);
 

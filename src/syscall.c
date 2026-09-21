@@ -8,6 +8,8 @@
 #include <memory.h>
 #include <io.h>
 #include <early.h>
+#include <elf.h>
+#include <fs/ustar.h>
 
 extern void _syscall_handler;
 
@@ -76,6 +78,7 @@ static uint64_t read_syscall(uint64_t fd, uint8_t *buf, size_t len);
 static uint64_t anon_allocate_syscall(size_t size, uint64_t *dk);
 static uint64_t exit_syscall(uint64_t exit);
 static uint64_t fork_syscall();
+static uint64_t execve_syscall(const char *path, char **argv, char **evnp);
 
 uint64_t syscall_handler(uint64_t index, uint64_t arg0, uint64_t arg1,
                          uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5)
@@ -91,6 +94,8 @@ uint64_t syscall_handler(uint64_t index, uint64_t arg0, uint64_t arg1,
 			return exit_syscall(arg0);
 		case 4:
 			return fork_syscall();
+		case 5:
+			return execve_syscall((const char *)arg0, (char **)arg1, (char **)arg2);
 		default:
 			return (uint64_t) -1;
 	}
@@ -132,7 +137,7 @@ static uint64_t exit_syscall(uint64_t exit)
 	for (int i = 0; i < MAX_RESOURCES; i++) {
 		resource_remove(i);
 	}
-
+	
 	uint64_t cr3 = process->cr3;
 
 	bitmap_allocator *ba = MUTEX_LOCK(g_ba);
@@ -223,7 +228,6 @@ static uint64_t fork_syscall()
 __after_timer:
 	// if we are the new process, we return
 	if (get_current_process()->cr3 == new_cr3) {
-		asm volatile("sti");
 		return 0;
 	}
 
@@ -246,3 +250,52 @@ __after_timer:
 
 	return 1;
 };
+
+// this is where we search for the files
+extern volatile struct limine_module_request module_request;
+static uint64_t execve_syscall(const char *path, char **argv, char **envp) {
+	// argv and envp are just ignored for now
+	process *p = get_current_process();
+	uint64_t cr3 = p->cr3;
+
+	// copy the path onto the stack
+	size_t path_len = strlen(path) + 1;
+	if (path_len > 0x2000) 
+		return (uint64_t)-1;
+	char path_buf[path_len];
+	memmove(path_buf, path, path_len);
+
+	// first delete some things
+	// namely the elf and allocated space
+	bitmap_allocator *ba = MUTEX_LOCK(g_ba);
+	free_region(cr3, ba, 0x400000, p->elf_end);
+	free_region(cr3, ba, 0x800000, p->anon_allocate_end);
+	MUTEX_UNLOCK(g_ba);
+
+	// reset this counter
+	p->anon_allocate_end = 0x800000;
+
+	// map the elf too
+	uint8_t *elf;
+	int file_size = tar_lookup(module_request.response->modules[0]->address,
+	                                path_buf, &elf);
+	ba = MUTEX_LOCK(g_ba);
+	p->elf_end = map_elf(ba, hhdm_request.response->offset, elf);
+	MUTEX_UNLOCK(g_ba);
+
+	elf_header *header = (elf_header *)(elf);
+
+	asm volatile("cli");
+	asm volatile(
+	        "mov $0x202, %%r11\n\t"
+	        "mov %0, %%rcx\n\t"
+	        "mov $0x400000, %%rsp\n\t"
+	        "sysretq\n\t"
+	        :
+	        : "r"(header->e_entry)
+	        : "rcx", "r11", "memory"
+	);
+
+	for (;;);
+	__builtin_unreachable();
+}

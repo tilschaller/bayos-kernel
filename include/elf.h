@@ -32,6 +32,6 @@ typedef struct {
 	uint64_t p_align;
 } __attribute__((packed)) elf_program;
 
-uint32_t map_init_elf(bitmap_allocator *ba, uint64_t offset, uint8_t *elf);
+uint32_t map_elf(bitmap_allocator *ba, uint64_t offset, uint8_t *elf);
 
 #endif // _ELF_H

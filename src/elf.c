@@ -4,7 +4,7 @@
 #include <io.h>
 #include <string.h>
 
-uint32_t map_init_elf(bitmap_allocator *ba, uint64_t offset, uint8_t *elf)
+uint32_t map_elf(bitmap_allocator *ba, uint64_t offset, uint8_t *elf)
 {
 	elf_header *header = (elf_header *)(elf);
 	elf_program *programs = (elf_program *)((uint8_t *)header + header->e_phoff);
