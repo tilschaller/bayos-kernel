@@ -12,6 +12,7 @@
 #include <syscall.h>
 #include <fs/ustar.h>
 #include <elf.h>
+#include <string.h>
 
 //
 // here we define what the limine bootloader should provide for us
@@ -244,6 +245,7 @@ void enter_ring_3_init(void)
 	proc->pid = 1;
 
 	// something needed for rtld i think
+	memset((void*)0x200000, 0, 0x200000);
 	*(uint64_t *)0x201000 = 0x201000;
 
 	asm volatile(

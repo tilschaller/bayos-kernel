@@ -1,4 +1,2 @@
-- implement fork
-- implement execute
-	- at least some kind of user mode accessible filesystem (probably initramfs)
+- add waitpid syscall
 - port some shell
