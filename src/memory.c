@@ -61,25 +61,31 @@ void bitmap_allocator_init(struct limine_memmap_response *memmap,
 	ba->areas_count = entry_count;
 }
 
-//
-// helper function to allocate physical pages
-//
-// return the index of the unused page in the bitmap
-// the bitmap must contain an unused page
-// and mark as used
-static int find_unused_page(uint8_t *bitmap, size_t len)
+static int find_unused_page(uint8_t *bitmap, size_t page_count)
 {
-	for (size_t i = 0; i < len; i++) {
-		for (int j = 0; j < 8; j++) {
-			int val = (bitmap[i] >> j) & 1;
-			if (val == 0) {
-				bitmap[i] |= 1 << j;
-				return i * 8 + j;
-			}
-		}
-	}
+	if (bitmap == NULL || page_count == 0 || page_count > 1000000) {
+        asm volatile("cli; hlt");
+        __builtin_unreachable();
+    }
 
-	return -1;
+
+    size_t byte_count = (page_count + 7) / 8;
+
+    for (size_t i = 0; i < byte_count; i++) {
+        for (unsigned j = 0; j < 8; j++) {
+            size_t page = i * 8 + j;
+
+            if (page >= page_count)
+                return -1;
+
+            if ((bitmap[i] & (uint8_t)(1u << j)) == 0) {
+                bitmap[i] |= (uint8_t)(1u << j);
+                return (int)page;
+            }
+        }
+    }
+
+    return -1;
 }
 
 //
@@ -88,16 +94,28 @@ static int find_unused_page(uint8_t *bitmap, size_t len)
 //
 void *allocate_page(bitmap_allocator *ba)
 {
-	for (size_t i = 0; i < ba->areas_count; i++) {
-		if (ba->areas[i]->pages_count != ba->areas[i]->used) {
-			int index = find_unused_page(ba->areas[i]->data,
-			                             bitmap_bytes_for(ba->areas[i]->pages_count));
-			ba->areas[i]->used++;
-			return (void *)((uintptr_t)ba->areas[i]->first_page + index * 0x1000);
-		}
-	}
+    for (size_t i = 0; i < ba->areas_count; i++) {
+        typeof(*ba->areas[i]) *area = ba->areas[i];
 
-	return NULL;
+        if (area->used >= area->pages_count)
+            continue;
+
+        int index = find_unused_page(area->data, area->pages_count);
+
+        if (index < 0 || (size_t)index >= area->pages_count) {
+        	asm volatile("cli; hlt");
+        	__builtin_unreachable();
+        }
+
+        area->used++;
+
+        return (void *)(
+            (uintptr_t)area->first_page +
+            (uintptr_t)index * 0x1000
+        );
+    }
+
+    return NULL;
 }
 
 // we just assume the address is proper

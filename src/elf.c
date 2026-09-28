@@ -8,7 +8,7 @@ uint32_t map_elf(bitmap_allocator *ba, uint64_t offset, uint8_t *elf)
 {
 	elf_header *header = (elf_header *)(elf);
 	elf_program *programs = (elf_program *)((uint8_t *)header + header->e_phoff);
-	uint32_t highest_address;
+	uint32_t highest_address = 0;
 	for (int i = 0; i < header->e_phnum; i++) {
 		if (programs[i].p_type == 1) {
 			if (programs[i].p_vaddr + programs[i].p_memsz > highest_address)
