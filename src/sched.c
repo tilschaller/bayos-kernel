@@ -6,6 +6,7 @@
 #include <string.h>
 #include <io.h>
 #include <early.h>
+#include <printk.h>
 
 #define PIT_CHANNEL0 0x40
 #define PIT_COMMAND 0x43
@@ -534,11 +535,15 @@ int resource_write(int fd, const uint8_t *buf, size_t len)
 
 static uint32_t next_pid = 0;
 int get_new_pid(void) {
-	return (int)__atomic_fetch_add(
+	int pid = (int)__atomic_fetch_add(
         &next_pid,
         1,
         __ATOMIC_SEQ_CST
     );
+
+    printk(QEMU_SERIAL, "New Pid generated: %d\n", pid);
+
+    return pid;
 }
 
 process *get_proc_from_pid(int pid) {

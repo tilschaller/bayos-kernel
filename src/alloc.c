@@ -1,4 +1,5 @@
 #include <alloc.h>
+#include <printk.h>
 
 void new_allocator(uintptr_t addr, size_t size, allocator *alloc)
 {
@@ -16,6 +17,8 @@ void new_allocator(uintptr_t addr, size_t size, allocator *alloc)
 
 void *alloc(allocator *alloc, size_t size)
 {
+	printk(QEMU_SERIAL, "New allocation requested: %x\n", size);
+
 	if (size < 0x20) size = 0x20;
 
 	heap_node *cur_node = alloc->first;
