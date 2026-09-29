@@ -2,7 +2,6 @@
 #include <string.h>
 #include <io.h>
 #include <limine.h>
-#include <early.h>
 
 //
 // helper functions for bitmap_allocator_init()

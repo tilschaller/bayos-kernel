@@ -1,25 +1,19 @@
 #include <interrupts.h>
-#include <early.h>
+#include <printk.h>
 
 //
 // this is the general exception handler
 // for interrupts 0-31, called by the functions in
 // exception_handler.asm
 // NOTE: these functions do not return, but print a error instead
-// also NOTE: these use early_prinkt for now, which is not really proper,
-// but the best solution for now. since it doesnt really matter, if the framebuffer
-// gets corrupted. we should just try to output something useful before halting completely
-//
 // num is the interrupt number
 // err is the error code, if there is one
 //
 __attribute__((noreturn))
 void exception_handler(uint64_t num, uint64_t err)
 {
-	(void)num;
-	(void)err;
-	early_printk("exception occured\n");
-	early_printk("halting execution\n");
+	printk(QEMU_SERIAL | EARLY, "exception %x occured. err: %x\n", num, err);
+	printk(QEMU_SERIAL | EARLY, "halting execution\n");
 
 	// we completely halt down the processor
 	asm volatile("cli");

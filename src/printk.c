@@ -13,6 +13,19 @@ static void putchar_framebuffer(int c) {
 	pipe_write(g_framebuffer_print_pipe, (uint8_t*)&c, 1);
 }
 
+framebuffer *fb_default = NULL;
+
+void early_printk_init(framebuffer *fb)
+{
+	fb_default = fb;
+}
+
+static void putchar_early(int c)
+{
+	if (!fb_default) return;
+	fb_default->putchar(fb_default, c);
+}
+
 static void putchar(printk_output_type type, int c) {
 	if (type & QEMU_SERIAL) {
 		putchar_qemu_serial(c);
@@ -20,6 +33,10 @@ static void putchar(printk_output_type type, int c) {
 
 	if (type & FRAMEBUFFER) {
 		putchar_framebuffer(c);
+	}
+
+	if (type & EARLY) {
+		putchar_early(c);
 	}
 }
 

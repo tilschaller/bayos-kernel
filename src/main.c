@@ -1,6 +1,5 @@
 #include <limine.h>
 #include <framebuffer.h>
-#include <early.h>
 #include <interrupts.h>
 #include <gdt.h>
 #include <memory.h>
@@ -102,58 +101,58 @@ void _start(void)
 	// in this function and ignored afterwards
 	//
 	early_printk_init(&fb);
-	early_printk("OS for BS\n");
+	printk(QEMU_SERIAL | EARLY, "OS for BS\n");
 
 	//
 	// the next step is setting up valid exceptions
 	// so the cpu can never crash without outputting some info
 	//
 	exceptions_init();
-	early_printk("[OK] Exceptions\n");
+	printk(QEMU_SERIAL | EARLY, "[OK] Exceptions\n");
 
 	//
 	// next we need to set up our own gdts
 	//
 	gdt_init();
-	early_printk("[OK] GDT\n");
+	printk(QEMU_SERIAL | EARLY, "[OK] GDT\n");
 
 	//
 	// then we set up the physical memory managment
 	//
 	// for this we need hhdm and the memory map
 	if (memory_map_request.response == NULL) {
-		early_printk("[FAIL] no memory map provided by limine\n");
+		printk(QEMU_SERIAL | EARLY, "[FAIL] no memory map provided by limine\n");
 		asm volatile("hlt");
 	}
 	if (hhdm_request.response == NULL) {
-		early_printk("[FAIL] no hhdm mapping provided by limine\n");
+		printk(QEMU_SERIAL | EARLY, "[FAIL] no hhdm mapping provided by limine\n");
 		asm volatile("hlt");
 	}
 
 	bitmap_allocator page_allocator;
 	bitmap_allocator_init(memory_map_request.response,
 	                      hhdm_request.response->offset, &page_allocator);
-	early_printk("[OK] Bitmap Allocator\n");
+	printk(QEMU_SERIAL | EARLY, "[OK] Bitmap Allocator\n");
 
 	//
 	// then we need to allocate space for the heap
 	//
 	allocate_region(&page_allocator, read_cr3(), 0xffffffff80000000 - 0x200000,
 	                0xffffffff80000000, 3);
-	early_printk("[OK] Heap\n");
+	printk(QEMU_SERIAL | EARLY, "[OK] Heap\n");
 
 	//
 	// with this space we can actually create the allocator
 	//
 	allocator al;
 	new_allocator(0xffffffff80000000 - 0x200000, 0x200000, &al);
-	early_printk("[OK] Allocator\n");
+	printk(QEMU_SERIAL | EARLY, "[OK] Allocator\n");
 
 	//
 	// next we need to set up the scheduler
 	//
 	sched_init(&al);
-	early_printk("[OK] Scheduler\n");
+	printk(QEMU_SERIAL | EARLY, "[OK] Scheduler\n");
 
 	//
 	// here we can check for modules
@@ -161,7 +160,7 @@ void _start(void)
 	// early_printk();
 	//
 	if (!module_request.response || module_request.response->module_count == 0) {
-		early_printk("[FAIL] no initramfs provided\n");
+		printk(QEMU_SERIAL | EARLY, "[FAIL] no initramfs provided\n");
 		asm volatile("hlt");
 	}
 
@@ -171,7 +170,7 @@ void _start(void)
 	int init_file_size = tar_lookup(module_request.response->modules[0]->address,
 	                                "/usr/bin/init", &init_elf);
 	if (!init_file_size) {
-		early_printk("[FAIL] no init process in initramfs\n");
+		printk(QEMU_SERIAL | EARLY, "[FAIL] no init process in initramfs\n");
 		asm volatile("hlt");
 	}
 
@@ -190,7 +189,7 @@ void _start(void)
 	g_ba.lock = mutex_create();
 	g_al.data = &al;
 	g_al.lock = mutex_create();
-	early_printk("[OK] Mutexes\n");
+	printk(QEMU_SERIAL | EARLY, "[OK] Mutexes\n");
 
 	//
 	// then we start up the scheduler
@@ -199,7 +198,7 @@ void _start(void)
 	// if everything other fails
 	// NOTE: dont use early_printk anymore, it doesnt respect the framebuffer mutex
 	//
-	early_printk("Giving up execution to scheduler\n");
+	printk(QEMU_SERIAL | EARLY, "Giving up execution to scheduler\n");
 	asm volatile("sti");
 
 	keyboard_process_init();
@@ -209,13 +208,6 @@ void _start(void)
 	add_process((uintptr_t)&framebuffer_print_process);
 
 	add_process((uintptr_t)&enter_ring_3_init);
-
-	printk(QEMU_SERIAL | FRAMEBUFFER, "Test from kernel printk!\n");
-	printk(QEMU_SERIAL | FRAMEBUFFER, "Tesing the x specifier: %x, %x, %x, %x\n", 0xffffffffffffffff, 0xffffffff, 0, 0x4000);
-	printk(QEMU_SERIAL | FRAMEBUFFER, "Testing the c specifier: %c\n", 'B');
-	printk(QEMU_SERIAL | FRAMEBUFFER, "Testing the %% specifier: %%\n");
-	printk(QEMU_SERIAL | FRAMEBUFFER, "Testing the s specifier: %s\n", "This is the %s test string");
-	printk(QEMU_SERIAL | FRAMEBUFFER, "Testing the d specifier: %d, %d, %d, %d\n", 100, -100, 0, 0xffff);
 
 	//
 	// this will continue running as a fallback

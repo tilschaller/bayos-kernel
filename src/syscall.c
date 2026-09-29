@@ -7,7 +7,6 @@
 #include <keyboard.h>
 #include <memory.h>
 #include <io.h>
-#include <early.h>
 #include <elf.h>
 #include <fs/ustar.h>
 

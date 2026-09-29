@@ -38,7 +38,6 @@ c_srcs = files(
   'src/main.c',
   'src/string.c',
   'src/framebuffer.c',
-  'src/early.c',
   'src/interrupts.c',
   'src/gdt.c',
   'src/memory.c',

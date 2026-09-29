@@ -5,7 +5,6 @@
 #include <interrupts.h>
 #include <string.h>
 #include <io.h>
-#include <early.h>
 #include <printk.h>
 
 #define PIT_CHANNEL0 0x40
