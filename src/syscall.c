@@ -166,7 +166,9 @@ static uint64_t fork_syscall()
 	MUTEX_UNLOCK(g_ba);
 
 	// mirror all the higher memory regions
+	// and clear low ones
 	uint64_t *v_new_cr3 = P2V(new_cr3);
+	memset(v_new_cr3, 0, 0x1000);
 	uint64_t *v_cr3 = P2V(cr3);
 	for (int i = 256; i < 512; i++) {
 		v_new_cr3[i] = v_cr3[i];

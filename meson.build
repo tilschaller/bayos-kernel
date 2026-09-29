@@ -17,6 +17,7 @@ cc_args = [
   '-mno-red-zone',
   '-mcmodel=kernel',
   '-mgeneral-regs-only',
+  '-O0',
   '-nostdinc',
   '-ffreestanding',
   '-fno-stack-check',

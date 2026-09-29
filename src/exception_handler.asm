@@ -6,6 +6,7 @@
 isr_stub_%+%1:
 	mov rdi, %1
 	pop rsi
+	mov rdx, rsp
 	call exception_handler
 	iretq 
 %endmacro
@@ -14,6 +15,7 @@ isr_stub_%+%1:
 isr_stub_%+%1:
 	mov rdi, %1
 	xor rsi, rsi
+	mov rdx, rsp
 	call exception_handler
 	iretq
 %endmacro
