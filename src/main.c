@@ -242,7 +242,7 @@ void enter_ring_3_init(void)
 	elf_header *header = (elf_header *)(init_elf);
 
 	process *proc = get_current_process();
-	proc->pid = 1;
+	proc->pid = get_new_pid();
 
 	// something needed for rtld i think
 	memset((void*)0x200000, 0, 0x200000);

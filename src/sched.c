@@ -91,32 +91,6 @@ void sched_init(struct allocator *al)
 	current_process = p;
 }
 
-
-//
-// this function is called from the schedule function only
-// if a function has been marked as dead
-// it should free all objects associated with the function and
-// free all memory
-// NOTE: this runs with interrupts disabled, since its only
-// called from the schedule function
-// HINT: if you want to delete a process manually do it with
-// mark_current_proc_as_dead()
-//
-// if we cant get the allocator we just skip this schedule round and let it be
-// till the allocator gets free sometimes
-//
-static void delete_process_resources(void)
-{
-	allocator *al = MUTEX_TRY_LOCK(g_al);
-	if (!al) return;
-
-	if (current_process->kernel_stack)
-		free(al, current_process->kernel_stack);
-	free(al, current_process);
-
-	MUTEX_UNLOCK(g_al);
-}
-
 //
 // this function will schedule a process
 // NOTE: this runs with interrupts disabled
@@ -138,11 +112,8 @@ cpu_status *schedule(cpu_status *context)
 
 		if (current_process != NULL &&
 		    (current_process->status == DEAD || current_process->status == BLOCKED)) {
-			if (current_process->status == DEAD) {
-				prev_process->next = current_process->next;
-				delete_process_resources();
-				current_process = prev_process;
-			}
+			// do nothing, kernel processes should run forever or take care of theyre own cleanup
+			// user processes should be reaped by wait eventually
 		}
 		else {
 			current_process->status = RUNNING;
@@ -559,4 +530,54 @@ int resource_write(int fd, const uint8_t *buf, size_t len)
 		default:
 			return -1;
 	}
+}
+
+static uint32_t next_pid = 0;
+int get_new_pid(void) {
+	return (int)__atomic_fetch_add(
+        &next_pid,
+        1,
+        __ATOMIC_SEQ_CST
+    );
+}
+
+process *get_proc_from_pid(int pid) {
+	unsigned long flags = save_irqdisable();
+
+	process *curr = process_list;
+	while (curr != NULL) {
+		if (curr->pid == pid) {
+			irqrestore(flags);
+			return curr;
+		}
+
+		curr = curr->next;
+	}
+
+	irqrestore(flags);
+	return NULL;
+}
+
+void remove_proc_from_list(process *p)
+{
+    if (p == nullptr || process_list == nullptr)
+        return;
+
+    if (process_list == p) {
+        process_list = process_list->next;
+        p->next = nullptr;
+        return;
+    }
+
+    process *current = process_list;
+
+    while (current->next != nullptr) {
+        if (current->next == p) {
+            current->next = p->next;
+            p->next = nullptr;
+            return;
+        }
+
+        current = current->next;
+    }
 }

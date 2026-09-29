@@ -79,6 +79,7 @@ static uint64_t anon_allocate_syscall(size_t size, uint64_t *dk);
 static uint64_t exit_syscall(uint64_t exit);
 static uint64_t fork_syscall();
 static uint64_t execve_syscall(const char *path, char **argv, char **evnp);
+static uint64_t waitpid_syscall(int pid, int *status, int flags);
 
 uint64_t syscall_handler(uint64_t index, uint64_t arg0, uint64_t arg1,
                          uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5)
@@ -96,6 +97,8 @@ uint64_t syscall_handler(uint64_t index, uint64_t arg0, uint64_t arg1,
 			return fork_syscall();
 		case 5:
 			return execve_syscall((const char *)arg0, (char **)arg1, (char **)arg2);
+		case 6:
+			return waitpid_syscall((int)arg0, (int*)arg1, (int)arg2);
 		default:
 			return (uint64_t) -1;
 	}
@@ -184,6 +187,7 @@ static uint64_t fork_syscall()
 	memcpy(p, proc, sizeof(process));
 	// adjust the cr3 of the new process
 	p->cr3 = new_cr3;
+	p->pid = get_new_pid();
 
 	// now we pretend an intterupt happened right here
 	uint64_t save_stack;
@@ -248,7 +252,7 @@ __after_timer:
 	// the stack becomes invalid
 	asm volatile("int $0x20");
 
-	return 1;
+	return (uint64_t)p->pid;
 };
 
 // this is where we search for the files
@@ -298,4 +302,32 @@ static uint64_t execve_syscall(const char *path, char **argv, char **envp) {
 
 	for (;;);
 	__builtin_unreachable();
+}
+
+static uint64_t waitpid_syscall(int pid, int *status, int flags) {
+	(void*)flags;
+
+	if (status == NULL || pid == -1)
+		return (uint64_t)-1;
+
+	process *c = get_proc_from_pid(pid);
+	if (!c)
+		return (uint64_t)-1;
+
+	// wait for the child process to be marked as dead
+	while (c->status != DEAD) {
+		// only check once everytime the process is scheduled
+		// to not waste cpu cycles
+		asm volatile("int $0x20");
+	}
+
+	// the process is dead, remove it from the list
+	remove_proc_from_list(c);
+
+	// now deallocate the process struct
+	allocator *al = MUTEX_LOCK(g_al);
+	free(al, c);
+	MUTEX_UNLOCK(g_al);
+
+	return pid;
 }

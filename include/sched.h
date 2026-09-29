@@ -132,4 +132,8 @@ int resource_read(int fd, uint8_t *buf, size_t len);
 // write to a resource
 int resource_write(int fd, const uint8_t *buf, size_t len);
 
+int get_new_pid(void);
+process *get_proc_from_pid(int);
+void remove_proc_from_list(process *p);
+
 #endif // _SCHED_H
