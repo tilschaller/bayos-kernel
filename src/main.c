@@ -13,6 +13,7 @@
 #include <fs/ustar.h>
 #include <elf.h>
 #include <string.h>
+#include <printk.h>
 
 //
 // here we define what the limine bootloader should provide for us
@@ -208,6 +209,13 @@ void _start(void)
 	add_process((uintptr_t)&framebuffer_print_process);
 
 	add_process((uintptr_t)&enter_ring_3_init);
+
+	printk(QEMU_SERIAL | FRAMEBUFFER, "Test from kernel printk!\n");
+	printk(QEMU_SERIAL | FRAMEBUFFER, "Tesing the x specifier: %x, %x, %x, %x\n", 0xffffffffffffffff, 0xffffffff, 0, 0x4000);
+	printk(QEMU_SERIAL | FRAMEBUFFER, "Testing the c specifier: %c\n", 'B');
+	printk(QEMU_SERIAL | FRAMEBUFFER, "Testing the %% specifier: %%\n");
+	printk(QEMU_SERIAL | FRAMEBUFFER, "Testing the s specifier: %s\n", "This is the %s test string");
+	printk(QEMU_SERIAL | FRAMEBUFFER, "Testing the d specifier: %d, %d, %d, %d\n", 100, -100, 0, 0xffff);
 
 	//
 	// this will continue running as a fallback

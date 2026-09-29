@@ -49,6 +49,7 @@ c_srcs = files(
   'src/syscall.c',
   'src/fs/ustar.c',
   'src/elf.c',
+  'src/printk.c',
 )
 
 nasm_gen = generator(nasm,
