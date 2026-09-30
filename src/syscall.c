@@ -97,7 +97,7 @@ uint64_t syscall_handler(uint64_t index, uint64_t arg0, uint64_t arg1,
 		case 5:
 			return execve_syscall((const char *)arg0, (char **)arg1, (char **)arg2);
 		case 6:
-			return waitpid_syscall((int)arg0, (int*)arg1, (int)arg2);
+			return waitpid_syscall((int)arg0, (int *)arg1, (int)arg2);
 		default:
 			return (uint64_t) -1;
 	}
@@ -136,10 +136,13 @@ static uint64_t exit_syscall(uint64_t exit)
 {
 	process *process = get_current_process();
 	// free all resources
-	for (int i = 0; i < MAX_RESOURCES; i++) {
+	for (int i = 0; i < process->resources_cap; i++) {
 		resource_remove(i);
 	}
-	
+
+
+	resource_table_free(process->resources);
+
 	uint64_t cr3 = process->cr3;
 
 	bitmap_allocator *ba = MUTEX_LOCK(g_ba);
@@ -189,6 +192,8 @@ static uint64_t fork_syscall()
 	// adjust the cr3 of the new process
 	p->cr3 = new_cr3;
 	p->pid = get_new_pid();
+	p->resources = resource_table_alloc(proc->resources_cap);
+	memcpy(p->resources, proc->resources, sizeof(resource) * proc->resources_cap);
 
 	// now we pretend an intterupt happened right here
 	uint64_t save_stack;
@@ -258,15 +263,16 @@ __after_timer:
 
 // this is where we search for the files
 extern volatile struct limine_module_request module_request;
-static uint64_t execve_syscall(const char *path, char **argv, char **envp) {
+static uint64_t execve_syscall(const char *path, char **argv, char **envp)
+{
 	// argv and envp are just ignored for now
 	process *p = get_current_process();
 	uint64_t cr3 = p->cr3;
 
 	// copy the path onto the stack
 	size_t path_len = strlen(path) + 1;
-	if (path_len > 0x2000) 
-		return (uint64_t)-1;
+	if (path_len > 0x2000)
+		return (uint64_t) -1;
 	char path_buf[path_len];
 	memmove(path_buf, path, path_len);
 
@@ -283,7 +289,7 @@ static uint64_t execve_syscall(const char *path, char **argv, char **envp) {
 	// map the elf too
 	uint8_t *elf;
 	int file_size = tar_lookup(module_request.response->modules[0]->address,
-	                                path_buf, &elf);
+	                           path_buf, &elf);
 	ba = MUTEX_LOCK(g_ba);
 	p->elf_end = map_elf(ba, hhdm_request.response->offset, elf);
 	MUTEX_UNLOCK(g_ba);
@@ -305,15 +311,16 @@ static uint64_t execve_syscall(const char *path, char **argv, char **envp) {
 	__builtin_unreachable();
 }
 
-static uint64_t waitpid_syscall(int pid, int *status, int flags) {
-	(void*)flags;
+static uint64_t waitpid_syscall(int pid, int *status, int flags)
+{
+	(void *)flags;
 
 	if (status == NULL || pid == -1)
-		return (uint64_t)-1;
+		return (uint64_t) -1;
 
 	process *c = get_proc_from_pid(pid);
 	if (!c)
-		return (uint64_t)-1;
+		return (uint64_t) -1;
 
 	// wait for the child process to be marked as dead
 	while (c->status != DEAD) {

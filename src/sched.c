@@ -156,6 +156,9 @@ void add_process(uintptr_t func)
 	p->anon_allocate_end = 0x800000;
 	p->elf_end = 0;
 	p->cr3 = read_cr3();
+
+	p->resources = NULL;
+
 	unsigned long save = save_irqdisable();
 	asm volatile("mov %%cr3, %0" : "=r"(p->cr3));
 	irqrestore(save);
@@ -195,36 +198,133 @@ void yield(void)
 	asm volatile("int $0x20");
 }
 
+
+resource *resource_table_alloc(size_t cap)
+{
+	allocator *al = MUTEX_LOCK(g_al);
+	resource *t = alloc(al, cap * sizeof(resource));
+	MUTEX_UNLOCK(g_al);
+
+	return t;
+}
+
+void resource_table_free(resource *t)
+{
+	allocator *al = MUTEX_LOCK(g_al);
+	free(al, t);
+	MUTEX_UNLOCK(g_al);
+}
+
 int resource_add(resource_type type, void *res)
 {
-	unsigned long flags = save_irqdisable();
+	process *proc = get_current_process();
 
-	for (int i = 0; i < MAX_RESOURCES; i++) {
-		if (current_process->resources[i].type == EMPTY) {
-			current_process->resources[i].type = type;
-			current_process->resources[i].res = res;
+	for (;;) {
+		unsigned long flags = save_irqdisable();
 
-			irqrestore(flags);
-			return i;
+		for (size_t i = 0; i < proc->resources_cap; i++) {
+			if (proc->resources[i].type == EMPTY) {
+				proc->resources[i].type = type;
+				proc->resources[i].res = res;
+
+				irqrestore(flags);
+				return (int)i;
+			}
 		}
+
+		size_t old_cap = proc->resources_cap;
+		irqrestore(flags);
+
+		// Table is full: grow. Allocate with IRQs enabled, since the
+		// allocator mutex may block.
+		size_t new_cap = old_cap * 2;
+		resource *new_tbl = resource_table_alloc(new_cap);
+		if (!new_tbl)
+			return -1;
+
+		flags = save_irqdisable();
+
+		if (proc->resources_cap != old_cap) {
+			// someone else already grew it while we were allocating
+			irqrestore(flags);
+			resource_table_free(new_tbl);
+			continue;
+		}
+
+		for (size_t i = 0; i < old_cap; i++)
+			new_tbl[i] = proc->resources[i];
+
+		resource *old_tbl = proc->resources;
+		proc->resources = new_tbl;
+		proc->resources_cap = new_cap;
+
+		irqrestore(flags);
+
+		resource_table_free(old_tbl);
+		// loop again; there is a free slot now
 	}
-
-	irqrestore(flags);
-	return -1;
-
 }
+
 void *resource_remove(int fd)
 {
+	process *proc = get_current_process();
 	unsigned long flags = save_irqdisable();
 
 	void *ret = NULL;
-	if (current_process->resources[fd].type != EMPTY)
-		ret = current_process->resources[fd].res;
-
-	current_process->resources[fd].type = EMPTY;
+	if (fd >= 0 && (size_t)fd < proc->resources_cap) {
+		if (proc->resources[fd].type != EMPTY)
+			ret = proc->resources[fd].res;
+		proc->resources[fd].type = EMPTY;
+		proc->resources[fd].res = NULL;
+	}
 
 	irqrestore(flags);
 	return ret;
+}
+
+// copies the entry out under IRQ-off so a concurrent grow can't free the
+// table underneath us; returns -1 if fd is invalid
+static int resource_get(int fd, resource *out)
+{
+	process *proc = get_current_process();
+	unsigned long flags = save_irqdisable();
+
+	if (fd < 0 || (size_t)fd >= proc->resources_cap) {
+		irqrestore(flags);
+		return -1;
+	}
+
+	*out = proc->resources[fd];
+	irqrestore(flags);
+	return 0;
+}
+
+int resource_read(int fd, uint8_t *buf, size_t len)
+{
+	resource r;
+	if (resource_get(fd, &r) < 0)
+		return -1;
+
+	switch (r.type) {
+		case PIPE:
+			return pipe_read((pipe *)r.res, buf, len);
+		default:
+			return -1;
+	}
+}
+
+int resource_write(int fd, const uint8_t *buf, size_t len)
+{
+	resource r;
+	if (resource_get(fd, &r) < 0)
+		return -1;
+
+	switch (r.type) {
+		case PIPE:
+			return pipe_write((pipe *)r.res, buf, len);
+		default:
+			return -1;
+	}
 }
 
 process *get_current_process()
@@ -238,44 +338,22 @@ process *get_current_process()
 	return proc;
 }
 
-int resource_read(int fd, uint8_t *buf, size_t len)
-{
-	process *proc = get_current_process();
-
-	switch (proc->resources[fd].type) {
-		case PIPE:
-			return pipe_read((pipe*)proc->resources[fd].res, buf, len);
-		default:
-			return -1;
-	}
-}
-
-int resource_write(int fd, const uint8_t *buf, size_t len)
-{
-	process *proc = get_current_process();
-
-	switch (proc->resources[fd].type) {
-		case PIPE:
-			return pipe_write((pipe*)proc->resources[fd].res, buf, len);
-		default:
-			return -1;
-	}
-}
-
 static uint32_t next_pid = 0;
-int get_new_pid(void) {
+int get_new_pid(void)
+{
 	int pid = (int)__atomic_fetch_add(
-        &next_pid,
-        1,
-        __ATOMIC_SEQ_CST
-    );
+	                  &next_pid,
+	                  1,
+	                  __ATOMIC_SEQ_CST
+	          );
 
-    printk(QEMU_SERIAL, "New Pid generated: %d\n", pid);
+	printk(QEMU_SERIAL, "New Pid generated: %d\n", pid);
 
-    return pid;
+	return pid;
 }
 
-process *get_proc_from_pid(int pid) {
+process *get_proc_from_pid(int pid)
+{
 	unsigned long flags = save_irqdisable();
 
 	process *curr = process_list;
@@ -294,24 +372,24 @@ process *get_proc_from_pid(int pid) {
 
 void remove_proc_from_list(process *p)
 {
-    if (p == nullptr || process_list == nullptr)
-        return;
+	if (p == nullptr || process_list == nullptr)
+		return;
 
-    if (process_list == p) {
-        process_list = process_list->next;
-        p->next = nullptr;
-        return;
-    }
+	if (process_list == p) {
+		process_list = process_list->next;
+		p->next = nullptr;
+		return;
+	}
 
-    process *current = process_list;
+	process *current = process_list;
 
-    while (current->next != nullptr) {
-        if (current->next == p) {
-            current->next = p->next;
-            p->next = nullptr;
-            return;
-        }
+	while (current->next != nullptr) {
+		if (current->next == p) {
+			current->next = p->next;
+			p->next = nullptr;
+			return;
+		}
 
-        current = current->next;
-    }
+		current = current->next;
+	}
 }

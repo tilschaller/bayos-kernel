@@ -7,7 +7,7 @@
 typedef enum {
 	// serial can always be used
 	QEMU_SERIAL = 1,
-	// framebuffer target can only be used after the scheduler 
+	// framebuffer target can only be used after the scheduler
 	// was started and the framebuffer print process was added
 	FRAMEBUFFER = 2,
 	// this is for early boot, before the scheduler was started

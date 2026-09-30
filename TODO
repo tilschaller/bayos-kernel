@@ -1,6 +1,2 @@
-- clean up src/sched.c
-	- split into multiple files
-	- dont place a limit on number of pipes
-	- dont place a limit on number of mutexes and so on
 - add support for filesystem (preferably ext2)
 - improve posix compatibility of syscalls

@@ -63,28 +63,28 @@ void bitmap_allocator_init(struct limine_memmap_response *memmap,
 static int find_unused_page(uint8_t *bitmap, size_t page_count)
 {
 	if (bitmap == NULL || page_count == 0 || page_count > 1000000) {
-        asm volatile("cli; hlt");
-        __builtin_unreachable();
-    }
+		asm volatile("cli; hlt");
+		__builtin_unreachable();
+	}
 
 
-    size_t byte_count = (page_count + 7) / 8;
+	size_t byte_count = (page_count + 7) / 8;
 
-    for (size_t i = 0; i < byte_count; i++) {
-        for (unsigned j = 0; j < 8; j++) {
-            size_t page = i * 8 + j;
+	for (size_t i = 0; i < byte_count; i++) {
+		for (unsigned j = 0; j < 8; j++) {
+			size_t page = i * 8 + j;
 
-            if (page >= page_count)
-                return -1;
+			if (page >= page_count)
+				return -1;
 
-            if ((bitmap[i] & (uint8_t)(1u << j)) == 0) {
-                bitmap[i] |= (uint8_t)(1u << j);
-                return (int)page;
-            }
-        }
-    }
+			if ((bitmap[i] & (uint8_t)(1u << j)) == 0) {
+				bitmap[i] |= (uint8_t)(1u << j);
+				return (int)page;
+			}
+		}
+	}
 
-    return -1;
+	return -1;
 }
 
 //
@@ -93,28 +93,28 @@ static int find_unused_page(uint8_t *bitmap, size_t page_count)
 //
 void *allocate_page(bitmap_allocator *ba)
 {
-    for (size_t i = 0; i < ba->areas_count; i++) {
-        typeof(*ba->areas[i]) *area = ba->areas[i];
+	for (size_t i = 0; i < ba->areas_count; i++) {
+		typeof(*ba->areas[i]) *area = ba->areas[i];
 
-        if (area->used >= area->pages_count)
-            continue;
+		if (area->used >= area->pages_count)
+			continue;
 
-        int index = find_unused_page(area->data, area->pages_count);
+		int index = find_unused_page(area->data, area->pages_count);
 
-        if (index < 0 || (size_t)index >= area->pages_count) {
-        	asm volatile("cli; hlt");
-        	__builtin_unreachable();
-        }
+		if (index < 0 || (size_t)index >= area->pages_count) {
+			asm volatile("cli; hlt");
+			__builtin_unreachable();
+		}
 
-        area->used++;
+		area->used++;
 
-        return (void *)(
-            (uintptr_t)area->first_page +
-            (uintptr_t)index * 0x1000
-        );
-    }
+		return (void *)(
+		               (uintptr_t)area->first_page +
+		               (uintptr_t)index * 0x1000
+		       );
+	}
 
-    return NULL;
+	return NULL;
 }
 
 // we just assume the address is proper

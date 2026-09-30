@@ -222,8 +222,7 @@ void _start(void)
 __attribute__((noreturn))
 void enter_ring_3_init(void)
 {
-	resource_add(PIPE, g_keyboard_pipe);
-	resource_add(PIPE, g_framebuffer_print_pipe);
+
 
 	//
 	// map the stack of the init process into our address space
@@ -245,9 +244,18 @@ void enter_ring_3_init(void)
 
 	process *proc = get_current_process();
 	proc->pid = get_new_pid();
+	proc->resources = resource_table_alloc(RESOURCES_INITIAL_CAP);
+	if (!proc->resources) {
+		printk(QEMU_SERIAL | FRAMEBUFFER,
+		       "ERROR: Could not allocate resource table for init process");
+		asm volatile("cli; hlt");
+	}
+	proc->resources_cap = RESOURCES_INITIAL_CAP;
+	resource_add(PIPE, g_keyboard_pipe);
+	resource_add(PIPE, g_framebuffer_print_pipe);
 
 	// something needed for rtld i think
-	memset((void*)0x200000, 0, 0x200000);
+	memset((void *)0x200000, 0, 0x200000);
 	*(uint64_t *)0x201000 = 0x201000;
 
 	asm volatile(

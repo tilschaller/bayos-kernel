@@ -16,7 +16,9 @@ typedef struct {
 	void *res;
 } resource;
 
-#define MAX_RESOURCES 0x100
+#define RESOURCES_INITIAL_CAP 128
+void resource_table_free(resource *t);
+resource *resource_table_alloc(size_t cap);
 
 typedef enum {
 	READY,
@@ -72,7 +74,8 @@ typedef struct process {
 	uint8_t *kernel_stack;
 
 	// user things
-	resource resources[MAX_RESOURCES];
+	resource *resources;
+	int resources_cap;
 	uint64_t anon_allocate_end;
 	uint32_t elf_end;
 } process;

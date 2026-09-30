@@ -19,12 +19,15 @@ typedef struct {
 __attribute__((noreturn))
 void exception_handler(uint64_t num, uint64_t err, iret_frame *frame)
 {
-	printk(QEMU_SERIAL | EARLY, "exception number 0x%x occured\nError: 0x%x\n", num, err);
+	printk(QEMU_SERIAL | EARLY, "exception number 0x%x occured\nError: 0x%x\n", num,
+	       err);
 
 	// gather some info
 	unsigned long cr2;
-	asm volatile ("mov %%cr2, %0" : "=r"(cr2));
-	printk(QEMU_SERIAL | EARLY, "CR2: 0x%x\nRIP: 0x%x\nCS: 0x%x\nFLAGS: 0x%x\nRSP: 0x%x\nSS: 0x%x\n", cr2, frame->rip,  frame->cs, frame->flags, frame->rsp, frame->ss);
+	asm volatile("mov %%cr2, %0" : "=r"(cr2));
+	printk(QEMU_SERIAL | EARLY,
+	       "CR2: 0x%x\nRIP: 0x%x\nCS: 0x%x\nFLAGS: 0x%x\nRSP: 0x%x\nSS: 0x%x\n", cr2,
+	       frame->rip,  frame->cs, frame->flags, frame->rsp, frame->ss);
 
 	printk(QEMU_SERIAL | EARLY, "halting execution\n");
 

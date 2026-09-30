@@ -102,7 +102,7 @@ int pipe_read(pipe *p, uint8_t *out, size_t len)
 void pipe_close(pipe *p)
 {
 	allocator *al = MUTEX_LOCK(g_al);
-	
+
 	free(al, p->buf_lock);
 	free(al, p->buffer);
 	free(al, p);
