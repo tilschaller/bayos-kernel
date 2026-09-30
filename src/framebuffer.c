@@ -1,5 +1,6 @@
 #include <framebuffer.h>
 #include <string.h>
+#include <pipe.h>
 
 //
 // the external sysmbols provided by the font
@@ -123,7 +124,7 @@ void framebuffer_init(struct limine_framebuffer *info, framebuffer *fb)
 }
 
 
-int g_framebuffer_print_pipe;
+pipe *g_framebuffer_print_pipe;
 
 void framebuffer_print_process(void)
 {

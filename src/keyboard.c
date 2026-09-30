@@ -3,8 +3,9 @@
 #include <sched.h>
 #include <framebuffer.h>
 #include <io.h>
+#include <pipe.h>
 
-int g_keyboard_pipe;
+pipe *g_keyboard_pipe;
 
 void keyboard_process(void);
 

@@ -3,9 +3,10 @@
 
 #include <stdint.h>
 #include <limine.h>
-#include <sched.h>
+#include <sem.h>
+#include <pipe.h>
 
-extern int g_framebuffer_print_pipe;
+extern pipe *g_framebuffer_print_pipe;
 void framebuffer_print_process(void);
 
 //

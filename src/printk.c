@@ -1,6 +1,6 @@
 #include <printk.h>
 #include <framebuffer.h>
-#include <sched.h>
+#include <pipe.h>
 #include <io.h>
 
 // print a char to the qemu serial

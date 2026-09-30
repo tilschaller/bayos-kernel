@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <limine.h>
 #include <sched.h>
+#include <sem.h>
 
 // TODO: performance improvements
 // (maybe as suggested here: https://wiki.osdev.org/Page_Frame_Allocation#Bitmap)

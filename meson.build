@@ -50,6 +50,8 @@ c_srcs = files(
   'src/fs/ustar.c',
   'src/elf.c',
   'src/printk.c',
+  'src/sem.c',
+  'src/pipe.c',
 )
 
 nasm_gen = generator(nasm,

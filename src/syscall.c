@@ -251,7 +251,7 @@ __after_timer:
 	// current one in the linked list
 	// meaning we reach __after_timer before
 	// the stack becomes invalid
-	asm volatile("int $0x20");
+	yield();
 
 	return (uint64_t)p->pid;
 };
@@ -319,7 +319,7 @@ static uint64_t waitpid_syscall(int pid, int *status, int flags) {
 	while (c->status != DEAD) {
 		// only check once everytime the process is scheduled
 		// to not waste cpu cycles
-		asm volatile("int $0x20");
+		yield();
 	}
 
 	// the process is dead, remove it from the list

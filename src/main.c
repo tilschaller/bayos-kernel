@@ -13,6 +13,7 @@
 #include <elf.h>
 #include <string.h>
 #include <printk.h>
+#include <pipe.h>
 
 //
 // here we define what the limine bootloader should provide for us
@@ -183,12 +184,13 @@ void _start(void)
 	// - bitmap_allocator page_allocator,
 	// - allocator al
 	//
+	mutex init_mutexes[3];
 	g_fb.data = &fb;
-	g_fb.lock = mutex_create();
+	g_fb.lock = mutex_create(&init_mutexes[0]);
 	g_ba.data = &page_allocator;
-	g_ba.lock = mutex_create();
+	g_ba.lock = mutex_create(&init_mutexes[1]);
 	g_al.data = &al;
-	g_al.lock = mutex_create();
+	g_al.lock = mutex_create(&init_mutexes[2]);
 	printk(QEMU_SERIAL | EARLY, "[OK] Mutexes\n");
 
 	//

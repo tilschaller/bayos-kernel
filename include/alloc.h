@@ -2,7 +2,7 @@
 #define _ALLOC_H
 
 #include <stdint.h>
-#include <sched.h>
+#include <sem.h>
 
 typedef enum {
 	USED,
