@@ -14,6 +14,7 @@
 #include <string.h>
 #include <printk.h>
 #include <pipe.h>
+#include <fs/vfs.h>
 
 //
 // here we define what the limine bootloader should provide for us
@@ -208,6 +209,9 @@ void _start(void)
 
 	g_framebuffer_print_pipe = pipe_create(0x100);
 	add_process((uintptr_t)&framebuffer_print_process);
+
+	vfs_init();
+	printk(QEMU_SERIAL | FRAMEBUFFER, "[OK] VFS\n");
 
 	add_process((uintptr_t)&enter_ring_3_init);
 

@@ -47,11 +47,13 @@ c_srcs = files(
   'src/keyboard.c',
   'src/io.c',
   'src/syscall.c',
+  'src/fs/vfs.c',
   'src/fs/ustar.c',
   'src/elf.c',
   'src/printk.c',
   'src/sem.c',
   'src/pipe.c',
+  'src/ll.c',
 )
 
 nasm_gen = generator(nasm,

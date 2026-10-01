@@ -17,11 +17,11 @@ void new_allocator(uintptr_t addr, size_t size, allocator *alloc)
 
 void *alloc(allocator *alloc, size_t size)
 {
-	printk(QEMU_SERIAL, "New allocation requested: %x\n", size);
-
 	if (size < 0x20) size = 0x20;
 
 	heap_node *cur_node = alloc->first;
+
+	printk(QEMU_SERIAL, "Allocating 0x%x bytes\n", size);
 
 	while (cur_node != NULL) {
 		if (cur_node->size == size && cur_node->status == FREE) {
@@ -61,6 +61,8 @@ void free(allocator *alloc, void *ptr)
 	if (node->status == FREE) return;
 
 	node->status = FREE;
+
+	printk(QEMU_SERIAL, "Freeing 0x%x bytes\n", node->size);
 
 	heap_node *prev = node->prev;
 	heap_node *next = node->next;
