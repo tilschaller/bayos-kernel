@@ -10,6 +10,9 @@ typedef enum {
 } heap_node_status;
 
 typedef struct heap_node {
+	// TODO: add a magic value in here
+	// so we can validate it actually is a node when deallocatating
+	// also: add checking if the pointer passed to free is even in the heap
 	size_t size;
 	heap_node_status status;
 	struct heap_node *prev;
