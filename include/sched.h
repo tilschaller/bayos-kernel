@@ -9,6 +9,7 @@ void sched_init(struct allocator *al);
 typedef enum {
 	EMPTY = 0,
 	PIPE,
+	FILE,
 } resource_type;
 
 typedef struct {

@@ -1,5 +1,6 @@
 #include <sched.h>
 #include <alloc.h>
+#include <fs/vfs.h>
 #include <stdint.h>
 #include <memory.h>
 #include <interrupts.h>
@@ -308,6 +309,8 @@ int resource_read(int fd, uint8_t *buf, size_t len)
 	switch (r.type) {
 		case PIPE:
 			return pipe_read((pipe *)r.res, buf, len);
+		case FILE:
+			return vfs_read((file_t *)r.res, buf, len);
 		default:
 			return -1;
 	}
@@ -322,6 +325,8 @@ int resource_write(int fd, const uint8_t *buf, size_t len)
 	switch (r.type) {
 		case PIPE:
 			return pipe_write((pipe *)r.res, buf, len);
+		case FILE:
+			return vfs_write((file_t *)r.res, buf, len);
 		default:
 			return -1;
 	}

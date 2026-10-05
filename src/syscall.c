@@ -286,6 +286,7 @@ static uint64_t execve_syscall(const char *path, char **argv, char **envp)
 	// reset this counter
 	p->anon_allocate_end = 0x800000;
 
+	// TODO: use the actual vfs layer to open this file
 	// map the elf too
 	uint8_t *elf;
 	int file_size = initramfs_lookup(module_request.response->modules[0]->address,
