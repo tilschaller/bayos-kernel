@@ -14,6 +14,9 @@ Mutex(ll_t) mountpoint_list;
 // 	... // do something with these mutexes
 // 	MUTEX_UNLOCK(g_al)
 // 	MUTEX_UNLOCK(mountpoint_list)
+// only lock these mutexes in this order
+// otherwise try to avoid using two mutexes at the same time
+// altogether
 
 int vfs_mount(device_t *device, const char *path, fs_operations_t *operations) {
 	allocator *al = MUTEX_LOCK(g_al);
@@ -105,6 +108,50 @@ int vfs_umount(const char *path) {
 
 	MUTEX_UNLOCK(g_al);
 	MUTEX_UNLOCK(mountpoint_list);
+}
+
+file_t *vfs_open(const char *path, int flags) {
+	ll_t *ll = MUTEX_LOCK(mountpoint_list);
+	mountpoint_t *mp = vfs_get_mountpoint(ll, path);
+	MUTEX_UNLOCK(mountpoint_list);
+	
+	if (!mp)
+		return NULL;
+
+	return mp->operations->open(path, flags);
+}
+
+size_t vfs_read(file_t *file, void *buf, size_t count) {
+	ll_t *ll = MUTEX_LOCK(mountpoint_list);
+	mountpoint_t *mp = vfs_get_mountpoint(ll, file->path);
+	MUTEX_UNLOCK(mountpoint_list);
+	
+	if (!mp)
+		return 0;
+
+	return mp->operations->read(file, buf, count);
+}
+
+size_t vfs_write(file_t *file, void *buf, size_t count) {
+	ll_t *ll = MUTEX_LOCK(mountpoint_list);
+	mountpoint_t *mp = vfs_get_mountpoint(ll, file->path);
+	MUTEX_UNLOCK(mountpoint_list);
+	
+	if (!mp)
+		return 0;
+
+	return mp->operations->write(file, buf, count);
+}
+
+int vfs_close(file_t *file) {
+	ll_t *ll = MUTEX_LOCK(mountpoint_list);
+	mountpoint_t *mp = vfs_get_mountpoint(ll, file->path);
+	MUTEX_UNLOCK(mountpoint_list);
+	
+	if (!mp)
+		return -1;
+
+	return mp->operations->close(file);
 }
 
 void vfs_init(void) {
