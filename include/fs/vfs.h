@@ -5,6 +5,7 @@
 
 typedef struct file_t {
 	char *path;
+	size_t offset;
 } file_t;
 
 typedef struct fs_operations_t {

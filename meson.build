@@ -48,7 +48,7 @@ c_srcs = files(
   'src/io.c',
   'src/syscall.c',
   'src/fs/vfs.c',
-  'src/fs/ustar.c',
+  'src/fs/initramfs.c',
   'src/elf.c',
   'src/printk.c',
   'src/sem.c',

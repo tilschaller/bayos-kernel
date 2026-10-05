@@ -9,7 +9,7 @@
 #include <io.h>
 #include <keyboard.h>
 #include <syscall.h>
-#include <fs/ustar.h>
+#include <fs/initramfs.h>
 #include <elf.h>
 #include <string.h>
 #include <printk.h>
@@ -169,7 +169,7 @@ void _start(void)
 	//
 	// find the init process
 	//
-	int init_file_size = tar_lookup(module_request.response->modules[0]->address,
+	int init_file_size = initramfs_lookup(module_request.response->modules[0]->address,
 	                                "/usr/bin/init", &init_elf);
 	if (!init_file_size) {
 		printk(QEMU_SERIAL | EARLY, "[FAIL] no init process in initramfs\n");

@@ -8,7 +8,7 @@
 #include <memory.h>
 #include <io.h>
 #include <elf.h>
-#include <fs/ustar.h>
+#include <fs/initramfs.h>
 
 extern void _syscall_handler;
 
@@ -288,7 +288,7 @@ static uint64_t execve_syscall(const char *path, char **argv, char **envp)
 
 	// map the elf too
 	uint8_t *elf;
-	int file_size = tar_lookup(module_request.response->modules[0]->address,
+	int file_size = initramfs_lookup(module_request.response->modules[0]->address,
 	                           path_buf, &elf);
 	ba = MUTEX_LOCK(g_ba);
 	p->elf_end = map_elf(ba, hhdm_request.response->offset, elf);

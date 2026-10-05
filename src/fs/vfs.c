@@ -3,6 +3,7 @@
 #include <alloc.h>
 #include <string.h>
 #include <printk.h>
+#include <fs/initramfs.h>
 
 Mutex(ll_t) mountpoint_list;
 
@@ -111,6 +112,9 @@ int vfs_umount(const char *path) {
 }
 
 file_t *vfs_open(const char *path, int flags) {
+	if (!path)
+		return NULL;
+
 	ll_t *ll = MUTEX_LOCK(mountpoint_list);
 	mountpoint_t *mp = vfs_get_mountpoint(ll, path);
 	MUTEX_UNLOCK(mountpoint_list);
@@ -163,8 +167,8 @@ void vfs_init(void) {
 	mountpoint_list.lock = mutex_create(mut);
 
 	// create the root mountpoint
-	fs_operations_t empty_ops = {0};
-	int ret = vfs_mount(NULL, "/", &empty_ops);
+	// this basically mounts the initramfs at '/'
+	int ret = vfs_mount(NULL, "/", &initramfs_operations);
 	if (ret) {
 		printk(QEMU_SERIAL | FRAMEBUFFER, "Could not create root mountpoint");
 		asm volatile("cli; hlt");
