@@ -6,6 +6,15 @@
 
 Mutex(ll_t) mountpoint_list;
 
+// if two mutexes are needed, it is
+// neccessary to lock the mutexes in the same order
+// to prevent deadlocks. the order used here is
+// 	MUTEX_UNLOCK(mountpoint_list)
+// 	MUTEX_LOCK(g_al)
+// 	... // do something with these mutexes
+// 	MUTEX_UNLOCK(g_al)
+// 	MUTEX_UNLOCK(mountpoint_list)
+
 int vfs_mount(device_t *device, const char *path, fs_operations_t *operations) {
 	allocator *al = MUTEX_LOCK(g_al);
 	mountpoint_t *mountpoint = alloc(al, sizeof(mountpoint_t));
@@ -30,11 +39,11 @@ int vfs_mount(device_t *device, const char *path, fs_operations_t *operations) {
 
 	strcpy(mountpoint->path, path);
 
-	al = MUTEX_LOCK(g_al);
 	ll_t *ll = MUTEX_LOCK(mountpoint_list);
+	al = MUTEX_LOCK(g_al);
 	int res = ll_add_back(al, ll, mountpoint);
-	MUTEX_UNLOCK(mountpoint_list);
 	MUTEX_UNLOCK(g_al);
+	MUTEX_UNLOCK(mountpoint_list);
 
 	if (res) {
 		al = MUTEX_LOCK(g_al);
@@ -47,15 +56,9 @@ int vfs_mount(device_t *device, const char *path, fs_operations_t *operations) {
 	return 0;
 }
 
-/* i need to overthink the usage of Mutexes in this function
- * we should never have two mutexes at the same time
- * also for example in vfs_umount there is a race condition in the removal
- * of the mountpoint
-mountpoint_t *vfs_get_mountpoint(const char *path) {
+mountpoint_t *vfs_get_mountpoint(ll_t *ll, const char *path) {
 	if (!path)
 		return NULL;
-
-	ll_t *ll = MUTEX_LOCK(mountpoint_list);
 
 	size_t mp_count = ll_size(ll);
 	mountpoint_t *best = NULL;
@@ -81,21 +84,20 @@ mountpoint_t *vfs_get_mountpoint(const char *path) {
 		}
 	}
 
-	MUTEX_UNLOCK(mountpoint_list);
-
 	return best;
 }
 
 int vfs_umount(const char *path) {
-	mountpoint_t *mp = vfs_get_mountpoint(path);
-	if (!mp)
-		return -1;
-
+	// lock the list the whole function
+	// to prevent race conditions
 	ll_t *ll = MUTEX_LOCK(mountpoint_list);
-	allocator *al = MUTEX_LOCK(g_al);
+	mountpoint_t *mp = vfs_get_mountpoint(ll, path);
+	if (!mp) {
+		MUTEX_UNLOCK(mountpoint_list);
+		return -1;
+	}
 
-	// if two processes unmount the same path at the same time
-	// we have a problem
+	allocator *al = MUTEX_LOCK(g_al);
 	free(al, mp->path);
 	free(al, mp);
 
@@ -104,7 +106,6 @@ int vfs_umount(const char *path) {
 	MUTEX_UNLOCK(g_al);
 	MUTEX_UNLOCK(mountpoint_list);
 }
-*/
 
 void vfs_init(void) {
 	allocator *al = MUTEX_LOCK(g_al);
