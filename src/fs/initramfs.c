@@ -40,7 +40,8 @@ int initramfs_lookup(uint8_t *archive, char *filename, uint8_t **out)
 static file_t *open(const char *path, int flags) {
 	// does the file exist?
 	uint8_t *out;
-	if (!initramfs_lookup(INITRAMFS, path, &out))
+	int filesz = initramfs_lookup(INITRAMFS, path, &out);
+	if (!filesz || !out)
 		return NULL;
 
 	allocator *al = MUTEX_LOCK(g_al);
@@ -64,6 +65,7 @@ static file_t *open(const char *path, int flags) {
 	strcpy(file->path, path);
 
 	file->offset = 0;
+	file->filesz = filesz;
 
 	return file;
 }

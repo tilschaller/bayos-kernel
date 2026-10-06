@@ -5,9 +5,15 @@
 
 typedef struct file_t {
 	char *path;
+
 	size_t offset;
+	size_t filesz;
 } file_t;
 
+
+// maybe it would make sense to pass the mountpoint to the functions
+// too, so it would have access to the device the filesystem it is on
+// and can see the path it is mounted on
 typedef struct fs_operations_t {
 	file_t *(*open)(const char *path, int flags);
 	size_t (*read)(file_t *file, void *buf, size_t count);

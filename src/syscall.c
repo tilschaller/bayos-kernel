@@ -9,6 +9,7 @@
 #include <io.h>
 #include <elf.h>
 #include <fs/initramfs.h>
+#include <fs/vfs.h>
 
 extern void _syscall_handler;
 
@@ -265,6 +266,10 @@ __after_timer:
 extern volatile struct limine_module_request module_request;
 static uint64_t execve_syscall(const char *path, char **argv, char **envp)
 {
+	file_t *elf = vfs_open(path, 0);
+	if (!elf)
+		return (uint64_t)-1;
+	
 	// argv and envp are just ignored for now
 	process *p = get_current_process();
 	uint64_t cr3 = p->cr3;
@@ -285,17 +290,26 @@ static uint64_t execve_syscall(const char *path, char **argv, char **envp)
 
 	// reset this counter
 	p->anon_allocate_end = 0x800000;
-
-	// TODO: use the actual vfs layer to open this file
-	// map the elf too
-	uint8_t *elf;
-	int file_size = initramfs_lookup(module_request.response->modules[0]->address,
-	                           path_buf, &elf);
+	
+	// allocate some random region for the file
+	uint8_t *elf_copy = (uint8_t*)0x800000;
 	ba = MUTEX_LOCK(g_ba);
-	p->elf_end = map_elf(ba, hhdm_request.response->offset, elf);
+	allocate_region(ba, cr3, 0x800000, 0x800000 + elf->filesz, 3);
 	MUTEX_UNLOCK(g_ba);
 
-	elf_header *header = (elf_header *)(elf);
+	vfs_read(elf, elf_copy, elf->filesz);
+
+	ba = MUTEX_LOCK(g_ba);
+	p->elf_end = map_elf(ba, hhdm_request.response->offset, elf_copy);
+	MUTEX_UNLOCK(g_ba);
+
+	uint64_t elf_entry = ((elf_header*)elf_copy)->e_entry;
+
+	ba = MUTEX_LOCK(g_ba);
+	free_region(cr3, ba, 0x800000, 0x800000 + elf->filesz);
+	MUTEX_UNLOCK(g_ba);
+
+	elf_header *header = (elf_header *)(elf_copy);
 
 	asm volatile("cli");
 	asm volatile(
@@ -304,7 +318,7 @@ static uint64_t execve_syscall(const char *path, char **argv, char **envp)
 	        "mov $0x400000, %%rsp\n\t"
 	        "sysretq\n\t"
 	        :
-	        : "r"(header->e_entry)
+	        : "r"(elf_entry)
 	        : "rcx", "r11", "memory"
 	);
 

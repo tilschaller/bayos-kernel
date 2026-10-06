@@ -80,7 +80,9 @@ mountpoint_t *vfs_get_mountpoint(ll_t *ll, const char *path) {
 
 		int matches =
 			(strncmp(path, mp->path, mp_len) == 0) &&
-			(path[mp_len] == '\0' || path[mp_len] == '/');
+			(mp_len == 1 ||
+			path[mp_len] == '\0' || 
+			path[mp_len] == '/');
 
 		if (matches && (best == NULL || mp_len > best_len)) {
 			best = mp;

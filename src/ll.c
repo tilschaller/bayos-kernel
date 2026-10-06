@@ -68,6 +68,8 @@ int ll_add_back(allocator *al, ll_t *ll, void *content) {
 	node->prev = ll->last;
 
 	ll->last = node;
+	if (!ll->first)
+		ll->first = node;
 	ll->size++;
 	
 	return 0;
@@ -87,6 +89,8 @@ int ll_add_front(allocator *al, ll_t *ll, void *content) {
 	node->next = ll->first;
 
 	ll->first = node;
+	if (!ll->last)
+		ll->last = node;
 	ll->size++;
 
 	return 0;
